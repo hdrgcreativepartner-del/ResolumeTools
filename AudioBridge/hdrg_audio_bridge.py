@@ -1,4 +1,4 @@
-"""HDRG Audio Bridge 1.2 — source-folder FLAC converter."""
+"""HDRG Audio Bridge 1.3 — source-folder FLAC converter."""
 from __future__ import annotations
 import os, sys, time, queue, shutil, subprocess, threading
 from pathlib import Path
@@ -28,14 +28,14 @@ def find_binary(name):
 class App(Base):
     def __init__(self):
         super().__init__()
-        self.title('HDRG Audio Bridge 1.2 | ResolumeTools')
+        self.title('HDRG Audio Bridge 1.3 | ResolumeTools')
         self.geometry('950x680'); self.minsize(770,530); self.configure(bg=BG)
         self.files=[]; self.events=queue.Queue(); self.worker=None; self.process=None
         self.cancel=threading.Event()
         self.watch=tk.BooleanVar(value=False); self.recursive=tk.BooleanVar(value=False)
         self.watch_path=tk.StringVar(value='Belum memilih folder monitor')
         self.depth=tk.StringVar(value='16-bit'); self.rate=tk.StringVar(value='Original')
-        self.overwrite=tk.BooleanVar(value=False); self.status=tk.StringVar(value='Siap • FLAC selalu disimpan bersama file sumber')
+        self.output_mode=tk.StringVar(value='source'); self.output_dir=tk.StringVar(value=''); self.overwrite=tk.BooleanVar(value=False); self.status=tk.StringVar(value='Siap • FLAC selalu disimpan bersama file sumber')
         self.seen={}
         self.create_ui()
         if hasattr(self,'drop_target_register'):
@@ -72,6 +72,11 @@ class App(Base):
         tk.Label(prefs,text='Bit depth',bg=BG,fg=TEXT).pack(side='left')
         ttk.Combobox(prefs,textvariable=self.depth,values=['16-bit','24-bit'],width=9,state='readonly').pack(side='left',padx=(8,20))
         tk.Checkbutton(prefs,text='Timpa FLAC yang sudah ada',variable=self.overwrite,bg=BG,fg=TEXT,selectcolor=PANEL,activebackground=BG).pack(side='left')
+        output=tk.Frame(self,bg=PANEL);output.pack(fill='x',padx=26,pady=3)
+        tk.Radiobutton(output,text='Folder sumber',variable=self.output_mode,value='source',command=self.refresh_output,bg=PANEL,fg=TEXT,selectcolor=BG).pack(side='left',padx=7)
+        tk.Radiobutton(output,text='Folder pilihan',variable=self.output_mode,value='custom',command=self.refresh_output,bg=PANEL,fg=TEXT,selectcolor=BG).pack(side='left')
+        self.button(output,'Pilih Folder Output',self.choose_output)
+        tk.Label(self,textvariable=self.output_dir,bg=BG,fg='#b9c8d9',anchor='w').pack(fill='x',padx=28)
         monitor=tk.Frame(self,bg=PANEL);monitor.pack(fill='x',padx=26,pady=3)
         tk.Checkbutton(monitor,text='Auto-Watch',variable=self.watch,bg=PANEL,fg=TEXT,selectcolor=BG,activebackground=PANEL).pack(side='left',padx=7)
         self.button(monitor,'Pilih Folder Monitor',self.choose_watch)
@@ -124,6 +129,13 @@ class App(Base):
         for row in self.tree.get_children():self.tree.delete(row)
         self.progress['value']=0
 
+    def choose_output(self):
+        folder=filedialog.askdirectory(title='Pilih folder hasil FLAC')
+        if folder:self.output_dir.set(folder);self.output_mode.set('custom');self.refresh_output()
+
+    def refresh_output(self):
+        self.status.set('Output: '+(self.output_dir.get() if self.output_mode.get()=='custom' else 'folder sumber'))
+
     def choose_watch(self):
         folder=filedialog.askdirectory(title='Pilih folder yang dipantau untuk MP3/WAV')
         if folder:
@@ -160,15 +172,17 @@ class App(Base):
         ffmpeg=find_binary('ffmpeg')
         if not ffmpeg:
             messagebox.showerror('FFmpeg tidak ditemukan','FFmpeg belum ada. Gunakan EXE hasil GitHub Actions yang sudah menyertakan FFmpeg.');return
+        if self.output_mode.get()=='custom' and not Path(self.output_dir.get()).is_dir():
+            messagebox.showerror('Output folder','Pilih folder output yang valid terlebih dahulu.');return
         self.cancel.clear()
-        opts=(ffmpeg,files,self.depth.get(),self.rate.get(),self.overwrite.get())
+        opts=(ffmpeg,files,self.depth.get(),self.rate.get(),self.overwrite.get(),self.output_mode.get(),self.output_dir.get())
         self.worker=threading.Thread(target=self.convert,args=(opts,),daemon=True);self.worker.start()
 
     def convert(self,opts):
-        ffmpeg,files,depth,rate,overwrite=opts;ok=fail=skip=0
+        ffmpeg,files,depth,rate,overwrite,mode,outdir=opts;ok=fail=skip=0
         for index,src in enumerate(files):
             if self.cancel.is_set():break
-            dest=src.with_suffix('.flac')
+            dest=(Path(outdir)/ (src.stem+'.flac')) if mode=='custom' else src.with_suffix('.flac')
             if src.resolve()==dest.resolve():
                 self.events.put(('row',str(src),'Sudah FLAC'));skip+=1;continue
             if dest.exists() and not overwrite:
@@ -208,7 +222,7 @@ class App(Base):
         selection=self.tree.selection()
         if not selection:
             messagebox.showinfo('Lokasi file','Pilih satu file di daftar terlebih dahulu.');return
-        folder=Path(selection[0]).parent
+        folder=(Path(self.output_dir.get()) if self.output_mode.get()=='custom' and self.output_dir.get() else Path(selection[0]).parent)
         if sys.platform=='win32':os.startfile(str(folder))
         elif sys.platform=='darwin':subprocess.Popen(['open',str(folder)])
         else:subprocess.Popen(['xdg-open',str(folder)])
