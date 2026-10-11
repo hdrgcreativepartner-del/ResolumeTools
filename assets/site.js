@@ -1,19 +1,12 @@
 const tools=[
-{id:"audio-bridge",title:"HDRG Audio Bridge",kind:"audio",icon:"♫",version:"v1.2",ready:true,description:"Convert MP3/WAV to FLAC and extract FLAC audio from MP4/MOV. Smart drag & drop, batch processing, same-source output.",url:"https://github.com/hdrgcreativepartner-del/ResolumeTools/actions/workflows/audio-bridge-windows.yml"},
-{id:"fx-pack",title:"HDRG FX Pack",kind:"fx",icon:"✳",version:"Planned",ready:false,description:"A collection of live visual effects for Resolume Arena 7."},
-{id:"slice-tools",title:"HDRG Slice Tools",kind:"utility",icon:"▦",version:"Planned",ready:false,description:"Mapping and slice utilities for LED workflows."}
+{title:"HDRG Audio Bridge",category:"audio",icon:"♫",status:"WINDOWS BUILD",version:"1.3",summary:"MP3/WAV dan audio dari MP4/MOV menjadi FLAC. Batch, drag & drop, Auto-Watch, serta folder output pilihan.",url:"https://github.com/hdrgcreativepartner-del/ResolumeTools/actions/workflows/audio-bridge-windows.yml",label:"Get Windows EXE ↗"},
+{title:"HDRG Particle Reactor FX",category:"fx",icon:"✦",status:"PLANNED",version:"Design phase",summary:"Partikel reaktif bass, mid dan treble. Mode burst, orbit, swirl, rain; kontrol warna, density, glow dan decay."},
+{title:"HDRG Media Prep",category:"utility",icon:"▣",status:"PLANNED",version:"Roadmap",summary:"Batch media conversion, pemeriksaan seamless loop, naming helper dan media optimizer untuk Resolume."},
+{title:"HDRG Slice Assistant",category:"utility",icon:"▦",status:"PLANNED",version:"Roadmap",summary:"Kalkulator cabinet LED, canvas layout dan planning mapping."},
+{title:"HDRG BPM & Cue",category:"utility",icon:"◎",status:"PLANNED",version:"Roadmap",summary:"BPM tap, beat trigger planning, penanda cue dan workflow OSC/MIDI."}
 ];
-let selected="all";
-const cards=document.querySelector("#cards");
-function draw(){cards.replaceChildren();for(const t of tools.filter(t=>selected==="all"||t.kind===selected)){const card=document.createElement("article");card.className="card";
-const icon=document.createElement("div");icon.className="tileicon";icon.textContent=t.icon;
-const tag=document.createElement("span");tag.className="tag"+(t.ready?"":" soon");tag.textContent=t.ready?"SOURCE / BUILD":"COMING SOON";
-const h=document.createElement("h3");h.textContent=t.title;
-const desc=document.createElement("p");desc.textContent=t.description;
-const foot=document.createElement("div");foot.className="foot";
-const v=document.createElement("small");v.textContent=t.version;foot.append(v);
-if(t.ready){const link=document.createElement("a");link.className="btn primary";link.href=t.url;link.target="_blank";link.rel="noopener";link.textContent="Get Windows Build ↗";link.title="GitHub Actions build page. Requires a successful build artifact; may require GitHub sign-in.";foot.append(link)}else{const txt=document.createElement("span");txt.className="muted";txt.textContent="In development";foot.append(txt)}
-card.append(icon,tag,h,desc,foot);cards.append(card)}}
-draw();
-for(const btn of document.querySelectorAll(".filter"))btn.addEventListener("click",()=>{selected=btn.dataset.category;document.querySelectorAll(".filter").forEach(x=>x.classList.toggle("active",x===btn));draw()});
-const dialog=document.querySelector("#admin-dialog");document.querySelector("#login-link").addEventListener("click",e=>{e.preventDefault();dialog.showModal()});document.querySelector("#close-dialog").addEventListener("click",()=>dialog.close());
+let category="all";const cards=document.querySelector("#cards");
+function draw(){cards.replaceChildren();tools.filter(t=>category==="all"||t.category===category).forEach(t=>{const el=document.createElement("article");el.className="card";let badge=document.createElement("span");badge.className="tag "+(t.url?"":"soon");badge.textContent=t.status;let icon=document.createElement("div");icon.className="tileicon";icon.textContent=t.icon;let h=document.createElement("h3");h.textContent=t.title;let desc=document.createElement("p");desc.textContent=t.summary;let foot=document.createElement("div");foot.className="foot";let version=document.createElement("small");version.textContent=t.version;foot.append(version);if(t.url){let link=document.createElement("a");link.className="btn primary";link.href=t.url;link.target="_blank";link.rel="noopener";link.textContent=t.label;foot.append(link)}else{let text=document.createElement("small");text.textContent="Coming soon";foot.append(text)}el.append(icon,badge,h,desc,foot);cards.append(el)})}draw();
+document.querySelectorAll(".filter").forEach(b=>b.addEventListener("click",()=>{category=b.dataset.category;document.querySelectorAll(".filter").forEach(x=>x.classList.toggle("active",x===b));draw()}));
+const dialog=document.querySelector("#login-dialog");const open=(e)=>{if(e)e.preventDefault();dialog.showModal()};document.querySelector("#login-link").addEventListener("click",open);document.querySelector("#login-hero").addEventListener("click",open);document.querySelector("#close-dialog").onclick=()=>dialog.close();document.querySelector("#attempt-login").onclick=()=>{document.querySelector("#login-note").textContent="Login belum tersedia dalam mode GitHub-only. Gunakan akses admin melalui GitHub.";document.querySelector("#login-pin").value=""};
+window.addEventListener("load",()=>{if(!sessionStorage.getItem("hdrg-splash-shown")){sessionStorage.setItem("hdrg-splash-shown","1");setTimeout(()=>{document.querySelector("#splash").classList.add("hide");setTimeout(open,470)},1550)}else{document.querySelector("#splash").classList.add("hide");setTimeout(open,170)}});
