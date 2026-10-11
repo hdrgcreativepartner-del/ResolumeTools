@@ -1,0 +1,28 @@
+name: Build HDRG Audio Bridge EXE
+on:
+  workflow_dispatch:
+  push:
+    paths:
+      - 'AudioBridge/**'
+      - '.github/workflows/audio-bridge-windows.yml'
+jobs:
+  build:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Install builder
+        run: python -m pip install pyinstaller tkinterdnd2
+      - name: Download FFmpeg
+        shell: pwsh
+        run: ./AudioBridge/download_ffmpeg.ps1
+      - name: Build standalone EXE
+        shell: pwsh
+        run: python -m PyInstaller --noconfirm --clean --onefile --windowed --collect-all tkinterdnd2 --name "HDRG Audio Bridge" --add-binary "AudioBridge/vendor/ffmpeg.exe;vendor" --add-binary "AudioBridge/vendor/ffprobe.exe;vendor" AudioBridge/hdrg_audio_bridge.py
+      - uses: actions/upload-artifact@v4
+        with:
+          name: HDRG-Audio-Bridge-Windows
+          path: dist/HDRG Audio Bridge.exe
+          if-no-files-found: error
