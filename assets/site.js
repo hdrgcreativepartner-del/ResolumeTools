@@ -1,5 +1,5 @@
 const tools=[
-{title:"HDRG Audio Bridge",category:"audio",icon:"♫",status:"WINDOWS",version:"v1.3",summary:"MP3/WAV dan audio dari MP4/MOV ke FLAC. Batch, drag & drop, Auto-Watch, dan pilihan folder output.",download:null},
+{title:"HDRG Audio Bridge",category:"audio",icon:"♫",status:"WINDOWS",version:"v1.3",summary:"MP3/WAV dan audio dari MP4/MOV ke FLAC. Batch, drag & drop, Auto-Watch, dan pilihan folder output.",download:"https://github.com/hdrgcreativepartner-del/ResolumeTools/releases/download/audiobridge-v1.3.0/HDRG_Audio_Bridge_v1.3_Windows.rar"},
 {title:"HDRG Particle Reactor FX",category:"fx",icon:"✦",status:"COMING SOON",version:"Design phase",summary:"Partikel reaktif bass/mid/treble, gaya burst, orbit, swirl, rain, custom color dan glow."},
 {title:"HDRG Media Prep",category:"utility",icon:"▣",status:"COMING SOON",version:"Roadmap",summary:"Batch transcode, seamless-loop checker, batch naming dan media optimization."},
 {title:"HDRG Slice Assistant",category:"utility",icon:"▦",status:"COMING SOON",version:"Roadmap",summary:"Kalkulator cabinet LED, layout dan mapping planning."},
