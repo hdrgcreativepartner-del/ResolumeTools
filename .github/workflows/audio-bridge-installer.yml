@@ -37,7 +37,7 @@ jobs:
           choco install winrar -y --no-progress
           $rar = "C:\Program Files\WinRAR\Rar.exe"
           if (!(Test-Path $rar)) { throw "RAR packaging unavailable: WinRAR CLI missing" }
-          & $rar a -m5 -ep "HDRG_Audio_Bridge_v1.3_Windows.rar" "installer-output\HDRG_Audio_Bridge_Setup_v1.3.0.exe"
+          & $rar a -m5 -ep "HDRG_Audio_Bridge_v1.3_Windows.rar" "AudioBridge\installer-output\HDRG_Audio_Bridge_Setup_v1.3.0.exe"
           if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
       - uses: actions/upload-artifact@v4
         with:
