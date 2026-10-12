@@ -18,7 +18,7 @@ PrivilegesRequired=lowest
 WizardStyle=modern
 SetupLogging=yes
 [Files]
-Source: "dist\HDRG Audio Bridge.exe"; DestDir: "{app}"; Flags: ignoreversion
+Source: "..\dist\HDRG Audio Bridge.exe"; DestDir: "{app}"; Flags: ignoreversion
 [Icons]
 Name: "{group}\HDRG Audio Bridge"; Filename: "{app}\HDRG Audio Bridge.exe"
 Name: "{autodesktop}\HDRG Audio Bridge"; Filename: "{app}\HDRG Audio Bridge.exe"; Tasks: desktopicon
