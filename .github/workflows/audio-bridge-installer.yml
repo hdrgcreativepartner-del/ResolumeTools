@@ -1,0 +1,54 @@
+name: Build HDRG Audio Bridge Installer
+on:
+  workflow_dispatch:
+  push:
+    paths:
+      - 'AudioBridge/**'
+      - '.github/workflows/audio-bridge-installer.yml'
+permissions:
+  contents: write
+jobs:
+  build:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Install Python packages
+        shell: pwsh
+        run: python -m pip install pyinstaller tkinterdnd2
+      - name: Fetch FFmpeg
+        shell: pwsh
+        run: ./AudioBridge/download_ffmpeg.ps1
+      - name: Build application
+        shell: pwsh
+        run: python -m PyInstaller --noconfirm --clean --onefile --windowed --collect-all tkinterdnd2 --name "HDRG Audio Bridge" --add-binary "AudioBridge/vendor/ffmpeg.exe;vendor" --add-binary "AudioBridge/vendor/ffprobe.exe;vendor" AudioBridge/hdrg_audio_bridge.py
+      - name: Create Inno Setup installer
+        shell: pwsh
+        run: |
+          $compiler = "${env:ProgramFiles(x86)}\Inno Setup 6\ISCC.exe"
+          if (!(Test-Path $compiler)) { choco install innosetup -y --no-progress }
+          & $compiler 'AudioBridge/installer.iss'
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+      - name: Package installer as RAR
+        shell: pwsh
+        run: |
+          choco install winrar -y --no-progress
+          $rar = "C:\Program Files\WinRAR\Rar.exe"
+          if (!(Test-Path $rar)) { throw "RAR packaging unavailable: WinRAR CLI missing" }
+          & $rar a -m5 -ep "HDRG_Audio_Bridge_v1.3_Windows.rar" "installer-output\HDRG_Audio_Bridge_Setup_v1.3.0.exe"
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+      - uses: actions/upload-artifact@v4
+        with:
+          name: HDRG-Audio-Bridge-Installer-RAR
+          path: HDRG_Audio_Bridge_v1.3_Windows.rar
+          if-no-files-found: error
+      - name: Publish GitHub Release download asset
+        shell: pwsh
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          gh release view "audiobridge-v1.3.0" *> $null
+          if ($LASTEXITCODE -ne 0) { gh release create "audiobridge-v1.3.0" --title "HDRG Audio Bridge v1.3.0" --notes "Windows installer package; includes FFmpeg." }
+          gh release upload "audiobridge-v1.3.0" "HDRG_Audio_Bridge_v1.3_Windows.rar" --clobber
