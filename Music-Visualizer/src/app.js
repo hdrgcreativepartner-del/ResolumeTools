@@ -246,7 +246,7 @@ $('presetGrid').addEventListener('click', e => {
   for (const [k, v] of Object.entries(presets[b.dataset.preset])) { conf[k] = v; const el = $(k); if (el) { el.value = v; el.dispatchEvent(new Event(k.endsWith('Mode') ? 'change' : 'input')); } }
   document.querySelectorAll('.preset').forEach(x => x.classList.toggle('active', x === b)); notify('Preset: ' + b.textContent);
 });
-$('playBtn').addEventListener('click', togglePlayback);
+$('playBtn').addEventListener('click', () => togglePlayback());
 const fmt = s => { if (!Number.isFinite(s)) return '00:00'; return `${String(Math.floor(s / 60)).padStart(2, '0')}:${String(Math.floor(s % 60)).padStart(2, '0')}` };
 for (const deck of decks) {
   deck.addEventListener('play', () => { if (deck === audio) { $('playBtn').textContent = 'Ⅱ'; refreshPlaylist(); } });
@@ -539,7 +539,7 @@ function render(now) {
   } else {
     ctx.textAlign = 'center'; ctx.fillStyle = '#ffffff'; ctx.font = 'bold 65px Segoe UI, Arial'; ctx.shadowColor = color; ctx.shadowBlur = 22; ctx.fillText('HDRG', 640, 370); ctx.shadowBlur = 0; ctx.fillStyle = '#b9b8d0'; ctx.font = '500 16px Segoe UI, Arial'; ctx.fillText('MUSIC VISUALIZER', 640, 410);
   }
-  ctx.restore(); drawPlayerOverlay(ctx); render.last = now;
+  ctx.restore(); if (typeof drawPlayerOverlay === "function") drawPlayerOverlay(ctx); render.last = now;
 }
 requestAnimationFrame(render);
 $('recordBtn').addEventListener('click', async () => {
