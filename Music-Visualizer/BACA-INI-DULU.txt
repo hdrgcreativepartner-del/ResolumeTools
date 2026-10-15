@@ -1,0 +1,4 @@
+HDRG Music Visualizer 0.5.0
+Player + Visual Studio, developed from v0.4.
+Use the .msi from the repository Releases page to install on Windows x64.
+This folder contains source code. See README.md for supported features and limitations.

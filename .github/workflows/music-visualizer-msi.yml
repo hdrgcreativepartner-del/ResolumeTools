@@ -1,0 +1,70 @@
+name: Build HDRG Music Visualizer MSI
+on:
+  workflow_dispatch:
+  push:
+    branches: [main]
+    paths:
+      - 'Music-Visualizer/**'
+      - '.github/workflows/music-visualizer-msi.yml'
+permissions:
+  contents: write
+concurrency:
+  group: music-visualizer-msi
+  cancel-in-progress: false
+jobs:
+  windows-msi:
+    runs-on: windows-latest
+    defaults:
+      run:
+        working-directory: Music-Visualizer
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: npm
+          cache-dependency-path: Music-Visualizer/package-lock.json
+      - run: npm ci
+      - run: npm test
+      - name: Build Windows x64 MSI only
+        run: npm run build:win
+        env:
+          CSC_IDENTITY_AUTO_DISCOVERY: 'false'
+      - name: Verify installer install, application startup and uninstall
+        shell: pwsh
+        run: |
+          $msi = (Get-ChildItem dist/*.msi | Select-Object -First 1).FullName
+          if (!$msi) { throw 'No MSI produced' }
+          $target = Join-Path $env:RUNNER_TEMP 'HDRG-Music-Visualizer-Smoke'
+          $log = Join-Path $env:RUNNER_TEMP 'hdrg-install.log'
+          $installer = Start-Process msiexec.exe -ArgumentList @('/i', "`"$msi`"", '/qn', '/norestart', "INSTALLDIR=`"$target`"", '/l*v', "`"$log`"") -Wait -PassThru
+          if ($installer.ExitCode -notin @(0,3010)) { Get-Content $log -Tail 100; throw "Install failed: $($installer.ExitCode)" }
+          try {
+            $exe = Join-Path $target 'HDRG Music Visualizer.exe'
+            if (!(Test-Path $exe)) { throw "Installed executable missing: $exe" }
+            $app = Start-Process $exe -ArgumentList '--smoke-test' -PassThru
+            if (!$app.WaitForExit(45000)) { Stop-Process -Id $app.Id -Force; throw 'App startup timed out' }
+            if ($app.ExitCode -ne 0) { throw "App smoke test failed: $($app.ExitCode)" }
+          } finally {
+            $uninstall = Start-Process msiexec.exe -ArgumentList @('/x', "`"$msi`"", '/qn', '/norestart') -Wait -PassThru
+            if ($uninstall.ExitCode -notin @(0,3010)) { throw "Uninstall failed: $($uninstall.ExitCode)" }
+          }
+      - uses: actions/upload-artifact@v4
+        with:
+          name: HDRG-Music-Visualizer-MSI
+          path: Music-Visualizer/dist/*.msi
+          if-no-files-found: error
+      - name: Publish MSI release
+        shell: pwsh
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          $version = (Get-Content package.json | ConvertFrom-Json).version
+          $tag = "music-visualizer-v$version"
+          gh release view $tag *> $null
+          if ($LASTEXITCODE -ne 0) {
+            gh release create $tag --target $env:GITHUB_SHA --title "HDRG Music Visualizer $version" --notes-file RELEASE-NOTES.md
+            if ($LASTEXITCODE -ne 0) { throw 'Release creation failed' }
+          }
+          gh release upload $tag dist/*.msi --clobber
+          if ($LASTEXITCODE -ne 0) { throw 'MSI upload failed' }

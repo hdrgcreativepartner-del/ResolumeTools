@@ -19,3 +19,7 @@ Buka **Actions** → **Build HDRG Audio Bridge EXE** → **Run workflow**, tungg
 Instal Python dan `pip install tkinterdnd2`. Siapkan ffmpeg + ffprobe di PATH atau `AudioBridge/vendor/`. Jalankan `python AudioBridge/hdrg_audio_bridge.py`.
 
 Perhatian: codec FLAC bersifat lossless untuk PCM yang sudah didekode, tetapi mengubah MP3 ke FLAC **tidak memulihkan** kualitas audio yang hilang dari kompresi MP3.
+
+## HDRG Music Visualizer
+
+Independent Windows music player and visual studio in [`Music-Visualizer/`](Music-Visualizer/). MSI-only installer, lyrics, playlist library and Auto DJ crossfade. See its README for exact scope and build instructions.

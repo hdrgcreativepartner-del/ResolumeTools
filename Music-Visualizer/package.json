@@ -1,0 +1,48 @@
+{
+  "name": "hdrg-music-visualizer",
+  "version": "0.5.0",
+  "description": "Music player, reactive visuals, synced lyrics and crossfade Auto DJ",
+  "main": "main.js",
+  "author": "HDRG Creative Partner",
+  "license": "UNLICENSED",
+  "scripts": {
+    "start": "electron .",
+    "test": "node --test tests/*.test.cjs",
+    "build:win": "electron-builder --win msi --x64 --publish never"
+  },
+  "devDependencies": {
+    "electron": "44.7.2",
+    "electron-builder": "26.15.3"
+  },
+  "build": {
+    "appId": "studio.hdrg.visualizer",
+    "productName": "HDRG Music Visualizer",
+    "directories": {
+      "output": "dist"
+    },
+    "files": [
+      "main.js",
+      "src/**/*",
+      "package.json"
+    ],
+    "win": {
+      "target": [
+        {
+          "target": "msi",
+          "arch": [
+            "x64"
+          ]
+        }
+      ],
+      "artifactName": "HDRG-Music-Visualizer-${version}-x64.${ext}"
+    },
+    "msi": {
+      "oneClick": false,
+      "perMachine": false,
+      "createDesktopShortcut": true,
+      "createStartMenuShortcut": true,
+      "runAfterFinish": false,
+      "upgradeCode": "B2C997E1-536B-4B2D-9A18-9062E93132E8"
+    }
+  }
+}
