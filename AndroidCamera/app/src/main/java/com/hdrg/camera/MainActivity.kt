@@ -100,11 +100,11 @@ class MainActivity:Activity(){
   footer.addView(timer,LinearLayout.LayoutParams(-1,dp(34)))
   val controls=LinearLayout(this).apply{gravity=Gravity.CENTER_VERTICAL}
   val gallery=action("▣").apply{textSize=29f;contentDescription="Gallery";setOnClickListener{openGallery()}}
-  shutter=action("●").apply{
+  shutter=action("").apply{
    textSize=55f;setTextColor(Color.rgb(246,58,69));contentDescription="Record or stop"
    setOnClickListener{if(active)stop()else start()}
    background=android.graphics.drawable.GradientDrawable().apply{
-    setColor(Color.argb(155,255,255,255));shape=android.graphics.drawable.GradientDrawable.OVAL
+    setColor(Color.rgb(245,65,78));shape=android.graphics.drawable.GradientDrawable.OVAL;setStroke(dp(5),Color.WHITE)
    }
   }
   pauseButton=action("Ⅱ").apply{textSize=28f;visibility=View.INVISIBLE;contentDescription="Pause or resume";setOnClickListener{pauseOrResume()}}
