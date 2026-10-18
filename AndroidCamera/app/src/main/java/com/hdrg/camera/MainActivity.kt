@@ -2,135 +2,170 @@ package com.hdrg.camera
 
 import android.Manifest
 import android.app.Activity
-import android.content.Intent
+import android.app.AlertDialog
+import android.content.*
 import android.content.pm.PackageManager
 import android.graphics.Color
 import android.graphics.SurfaceTexture
 import android.hardware.camera2.*
+import android.net.Uri
 import android.os.*
+import android.provider.MediaStore
 import android.view.*
 import android.widget.*
 import androidx.core.app.ActivityCompat
 import androidx.core.content.ContextCompat
 
-class MainActivity : Activity() {
- private lateinit var status:TextView
+// UI and recording service share only the preview Surface within this application process.
+object CameraPreviewBridge { @Volatile var surface:Surface?=null }
+
+class MainActivity:Activity(){
  private lateinit var preview:TextureView
- private lateinit var interval:Spinner
- private lateinit var quality:Spinner
- private lateinit var audio:CheckBox
- private lateinit var pause:Button
- private var previewCamera:CameraDevice?=null
- private var previewSession:CameraCaptureSession?=null
- private val cameraThread=HandlerThread("HDRGPreview").apply{start()}
- private val cameraHandler=Handler(cameraThread.looper)
- private var recording=false
+ private lateinit var shutter:TextView
+ private lateinit var state:TextView
+ private lateinit var timer:TextView
+ private lateinit var pauseButton:TextView
+ private lateinit var modeButton:TextView
+ private lateinit var qualityButton:TextView
+ private lateinit var lensButton:TextView
+ private var previewSurface:Surface?=null
+ private var idleCamera:CameraDevice?=null
+ private var idleSession:CameraCaptureSession?=null
+ private val thread=HandlerThread("CameraUI").apply{start()}
+ private val handler=Handler(thread.looper)
+ private val ui=Handler(Looper.getMainLooper())
+ private var lens=CameraCharacteristics.LENS_FACING_BACK
+ private var quality=1080
+ private var interval=0
+ private var audio=true
+ private var active=false
  private var paused=false
- private val modeLabels=listOf("Normal video","Timelapse · 1 sec","Timelapse · 2 sec","Timelapse · 5 sec","Timelapse · 10 sec","Timelapse · 30 sec")
+ private var starting=false
+ private var elapsedStart=0L
+ private val updater=object:Runnable{override fun run(){
+  if(active&&!paused){val s=(SystemClock.elapsedRealtime()-elapsedStart)/1000;timer.text="%02d:%02d".format(s/60,s%60)}
+  ui.postDelayed(this,1000)
+ }}
  override fun onCreate(savedInstanceState:Bundle?){
   super.onCreate(savedInstanceState)
-  window.statusBarColor=Color.rgb(8,16,27)
-  val root=LinearLayout(this).apply{orientation=LinearLayout.VERTICAL;setPadding(28,26,28,20);setBackgroundColor(Color.rgb(8,16,27))}
-  fun label(value:String,size:Float)=TextView(this).apply{text=value;textSize=size;setTextColor(Color.WHITE);setPadding(0,9,0,9)}
-  root.addView(label("HDRG CAMERA",27f));root.addView(label("VIDEO  /  TIMELAPSE  /  BACKGROUND",12f))
+  window.statusBarColor=Color.BLACK;window.navigationBarColor=Color.BLACK
+  val root=FrameLayout(this).apply{setBackgroundColor(Color.BLACK)}
   preview=TextureView(this)
-  root.addView(preview,LinearLayout.LayoutParams(-1,0,1.0f))
-  interval=Spinner(this).apply{adapter=ArrayAdapter(this@MainActivity,android.R.layout.simple_spinner_dropdown_item,modeLabels)}
-  quality=Spinner(this).apply{adapter=ArrayAdapter(this@MainActivity,android.R.layout.simple_spinner_dropdown_item,listOf("720p HD","1080p Full HD","2160p 4K (if supported)"))}
-  root.addView(label("MODE",12f));root.addView(interval)
-  root.addView(label("RESOLUTION",12f));root.addView(quality)
-  audio=CheckBox(this).apply{text="Record microphone audio (normal video)";setTextColor(Color.WHITE);isChecked=true}
-  root.addView(audio)
-  status=label("Ready • Video will appear in Movies/HDRG Camera (Android 10+)",13f);root.addView(status)
-  val buttons=LinearLayout(this).apply{orientation=LinearLayout.HORIZONTAL}
-  val start=Button(this).apply{text="● RECORD";setOnClickListener{startRecord()}}
-  pause=Button(this).apply{text="PAUSE";isEnabled=false;setOnClickListener{togglePause()}}
-  val stop=Button(this).apply{text="■ STOP";setOnClickListener{stopRecord()}}
-  for(b in listOf(start,pause,stop))buttons.addView(b,LinearLayout.LayoutParams(0,-2,1f))
-  root.addView(buttons)
-  root.addView(label("When recording continues in the background, Android displays an ongoing notification with a Stop action.",11f))
+  root.addView(preview,FrameLayout.LayoutParams(-1,-1))
+  val shade=View(this).apply{setBackgroundColor(Color.argb(85,0,0,0))}
+  root.addView(shade,FrameLayout.LayoutParams(-1,dp(120),Gravity.TOP))
+  val top=LinearLayout(this).apply{orientation=LinearLayout.VERTICAL;setPadding(dp(20),dp(14),dp(20),0)}
+  val row=LinearLayout(this).apply{gravity=Gravity.CENTER_VERTICAL}
+  fun action(label:String):TextView=TextView(this).apply{text=label;setTextColor(Color.WHITE);textSize=16f;gravity=Gravity.CENTER;setPadding(dp(11),dp(9),dp(11),dp(9))}
+  val brand=action("HDRG  CAMERA").apply{textSize=17f;setTypeface(typeface,1)}
+  row.addView(brand,LinearLayout.LayoutParams(0,dp(48),1f))
+  qualityButton=action("1080p")
+  row.addView(qualityButton)
+  lensButton=action("↻")
+  row.addView(lensButton)
+  top.addView(row)
+  state=action("● READY").apply{setTextColor(Color.rgb(190,213,234));textSize=12f;gravity=Gravity.LEFT}
+  top.addView(state)
+  root.addView(top,FrameLayout.LayoutParams(-1,-2,Gravity.TOP))
+  val footer=LinearLayout(this).apply{orientation=LinearLayout.VERTICAL;setPadding(dp(18),dp(12),dp(18),dp(24));setBackgroundColor(Color.argb(210,3,8,15))}
+  modeButton=action("VIDEO     ·     TIMELAPSE").apply{textSize=14f}
+  footer.addView(modeButton)
+  timer=action("00:00").apply{textSize=15f;setTextColor(Color.rgb(255,105,114));visibility=View.INVISIBLE}
+  footer.addView(timer)
+  val controls=LinearLayout(this).apply{gravity=Gravity.CENTER_VERTICAL or Gravity.CENTER_HORIZONTAL}
+  val gallery=action("▣").apply{textSize=30f;setOnClickListener{openGallery()}}
+  shutter=action("●").apply{textSize=58f;setTextColor(Color.rgb(255,66,87));setOnClickListener{if(active)stop()else start()}}
+  pauseButton=action("Ⅱ").apply{textSize=29f;visibility=View.INVISIBLE;setOnClickListener{pauseOrResume()}}
+  controls.addView(gallery,LinearLayout.LayoutParams(0,dp(75),1f))
+  controls.addView(shutter,LinearLayout.LayoutParams(0,dp(90),1f))
+  controls.addView(pauseButton,LinearLayout.LayoutParams(0,dp(75),1f))
+  footer.addView(controls)
+  val hint=action("Tap ● to record  •  Background via ongoing notification").apply{textSize=11f;setTextColor(Color.rgb(174,195,213))}
+  footer.addView(hint)
+  root.addView(footer,FrameLayout.LayoutParams(-1,-2,Gravity.BOTTOM))
   setContentView(root)
+  qualityButton.setOnClickListener{
+   if(active)return@setOnClickListener
+   val opts=arrayOf("720p HD","1080p Full HD","2160p 4K (if available)")
+   AlertDialog.Builder(this).setTitle("Video resolution").setSingleChoiceItems(opts,when(quality){720->0;2160->2;else->1}){d,index->quality=intArrayOf(720,1080,2160)[index];qualityButton.text=opts[index].substringBefore(" ");d.dismiss()}.show()
+  }
+  lensButton.setOnClickListener{if(active)return@setOnClickListener;lens=if(lens==CameraCharacteristics.LENS_FACING_BACK)CameraCharacteristics.LENS_FACING_FRONT else CameraCharacteristics.LENS_FACING_BACK;closeIdle();openIdle()}
+  modeButton.setOnClickListener{
+   if(active)return@setOnClickListener
+   val options=arrayOf("Video (with microphone)","Video (silent)","Timelapse · 1s","Timelapse · 2s","Timelapse · 5s","Timelapse · 10s","Timelapse · 30s")
+   AlertDialog.Builder(this).setTitle("Capture mode").setItems(options){_,i->
+    interval=when(i){2->1;3->2;4->5;5->10;6->30;else->0};audio=i==0
+    modeButton.text=if(interval>0)"TIMELAPSE  ·  ${interval}s" else if(audio)"VIDEO  ·  AUDIO ON" else "VIDEO  ·  SILENT"
+   }.show()
+  }
   preview.surfaceTextureListener=object:TextureView.SurfaceTextureListener{
-   override fun onSurfaceTextureAvailable(surface:SurfaceTexture,w:Int,h:Int){startPreview()}
-   override fun onSurfaceTextureSizeChanged(surface:SurfaceTexture,w:Int,h:Int){}
-   override fun onSurfaceTextureDestroyed(surface:SurfaceTexture):Boolean{closePreview();return true}
-   override fun onSurfaceTextureUpdated(surface:SurfaceTexture){}
+   override fun onSurfaceTextureAvailable(t:SurfaceTexture,w:Int,h:Int){attachSurface()}
+   override fun onSurfaceTextureSizeChanged(t:SurfaceTexture,w:Int,h:Int){}
+   override fun onSurfaceTextureDestroyed(t:SurfaceTexture):Boolean{detachSurface();return true}
+   override fun onSurfaceTextureUpdated(t:SurfaceTexture){}
   }
-  requestNeededPermissions()
+  val ask=mutableListOf(Manifest.permission.CAMERA,Manifest.permission.RECORD_AUDIO)
+  if(Build.VERSION.SDK_INT>=33)ask.add(Manifest.permission.POST_NOTIFICATIONS)
+  val missing=ask.filter{ContextCompat.checkSelfPermission(this,it)!=PackageManager.PERMISSION_GRANTED}
+  if(missing.isNotEmpty())ActivityCompat.requestPermissions(this,missing.toTypedArray(),1)
+  ui.post(updater)
  }
- private fun requestNeededPermissions(){
-   val permissions=mutableListOf(Manifest.permission.CAMERA,Manifest.permission.RECORD_AUDIO)
-   if(Build.VERSION.SDK_INT>=33)permissions.add(Manifest.permission.POST_NOTIFICATIONS)
-   val missing=permissions.filter{ContextCompat.checkSelfPermission(this,it)!=PackageManager.PERMISSION_GRANTED}
-   if(missing.isNotEmpty())ActivityCompat.requestPermissions(this,missing.toTypedArray(),109)
+ private fun dp(n:Int)=(resources.displayMetrics.density*n).toInt()
+ private fun command(action:String){startService(Intent(this,CaptureService::class.java).apply{this.action=action})}
+ private fun attachSurface(){
+  if(!preview.isAvailable)return
+  preview.surfaceTexture?.setDefaultBufferSize(1280,720)
+  previewSurface=Surface(preview.surfaceTexture!!)
+  CameraPreviewBridge.surface=previewSurface
+  if(CaptureService.running)command(CaptureService.ATTACH) else openIdle()
  }
- override fun onRequestPermissionsResult(requestCode:Int,permissions:Array<out String>,results:IntArray){super.onRequestPermissionsResult(requestCode,permissions,results);if(preview.isAvailable)startPreview()}
- private fun startPreview(){
-  if(recording||!preview.isAvailable||previewCamera!=null)return
-  if(ContextCompat.checkSelfPermission(this,Manifest.permission.CAMERA)!=PackageManager.PERMISSION_GRANTED)return
+ private fun detachSurface(){
+  if(CaptureService.running)command(CaptureService.DETACH) else closeIdle()
+  CameraPreviewBridge.surface=null
+  // Service removes this target before a new session is created.
+  previewSurface=null
+ }
+ private fun openIdle(){
+  if(!preview.isAvailable||CaptureService.running||idleCamera!=null)return
+  if(checkSelfPermission(Manifest.permission.CAMERA)!=PackageManager.PERMISSION_GRANTED)return
   val manager=getSystemService(CAMERA_SERVICE) as CameraManager
+  val id=manager.cameraIdList.firstOrNull{manager.getCameraCharacteristics(it).get(CameraCharacteristics.LENS_FACING)==lens}?:return
+  try{manager.openCamera(id,object:CameraDevice.StateCallback(){
+   override fun onOpened(c:CameraDevice){idleCamera=c;val s=previewSurface?:return;c.createCaptureRequest(CameraDevice.TEMPLATE_PREVIEW).apply{addTarget(s)}.also{builder->
+    @Suppress("DEPRECATION") c.createCaptureSession(listOf(s),object:CameraCaptureSession.StateCallback(){
+     override fun onConfigured(session:CameraCaptureSession){idleSession=session;try{session.setRepeatingRequest(builder.build(),null,handler)}catch(_:Exception){}}
+     override fun onConfigureFailed(session:CameraCaptureSession){closeIdle()}
+    },handler)
+   }}
+   override fun onDisconnected(c:CameraDevice){closeIdle()}
+   override fun onError(c:CameraDevice,error:Int){closeIdle()}
+  },handler)}catch(_:Exception){state.text="Camera not available"}
+ }
+ private fun closeIdle(){try{idleSession?.close()}catch(_:Exception){};idleSession=null;try{idleCamera?.close()}catch(_:Exception){};idleCamera=null}
+ private fun start(){
+  if(active||starting)return
+  if(checkSelfPermission(Manifest.permission.CAMERA)!=PackageManager.PERMISSION_GRANTED){ActivityCompat.requestPermissions(this,arrayOf(Manifest.permission.CAMERA),1);return}
+  if(audio&&checkSelfPermission(Manifest.permission.RECORD_AUDIO)!=PackageManager.PERMISSION_GRANTED){ActivityCompat.requestPermissions(this,arrayOf(Manifest.permission.RECORD_AUDIO),1);return}
+  starting=true;closeIdle()
+  handler.postDelayed({
+   val intent=Intent(this,CaptureService::class.java).apply{action=CaptureService.START;putExtra("lens",lens);putExtra("height",quality);putExtra("interval",interval);putExtra("audio",audio)}
+   try{ContextCompat.startForegroundService(this,intent);ui.post{active=true;starting=false;paused=false;elapsedStart=SystemClock.elapsedRealtime();state.text="● RECORDING";timer.visibility=View.VISIBLE;pauseButton.visibility=View.VISIBLE;shutter.text="■";lensButton.alpha=.45f}}
+   catch(e:Exception){ui.post{starting=false;state.text="Failed to start";openIdle()}}
+  },350)
+ }
+ private fun stop(){
+  command(CaptureService.STOP);active=false;paused=false;timer.visibility=View.INVISIBLE;pauseButton.visibility=View.INVISIBLE;pauseButton.text="Ⅱ";shutter.text="●";state.text="Saving to Gallery…";lensButton.alpha=1f
+  ui.postDelayed({if(!CaptureService.running){state.text="READY";openIdle()}},1800)
+ }
+ private fun pauseOrResume(){if(!active)return;command(if(paused)CaptureService.RESUME else CaptureService.PAUSE);paused=!paused;pauseButton.text=if(paused)"▶" else "Ⅱ";state.text=if(paused)"PAUSED" else "● RECORDING"}
+ private fun openGallery(){
   try{
-   val id=manager.cameraIdList.firstOrNull{manager.getCameraCharacteristics(it).get(CameraCharacteristics.LENS_FACING)==CameraCharacteristics.LENS_FACING_BACK} ?:return
-   manager.openCamera(id,object:CameraDevice.StateCallback(){
-    override fun onOpened(device:CameraDevice){
-      previewCamera=device
-      try{
-       val texture=preview.surfaceTexture ?:return
-       texture.setDefaultBufferSize(1280,720)
-       val surface=Surface(texture)
-       val req=device.createCaptureRequest(CameraDevice.TEMPLATE_PREVIEW).apply{addTarget(surface)}.build()
-       @Suppress("DEPRECATION")
-       device.createCaptureSession(listOf(surface),object:CameraCaptureSession.StateCallback(){
-        override fun onConfigured(session:CameraCaptureSession){
-         previewSession=session
-         try{session.setRepeatingRequest(req,null,cameraHandler)}catch(_:Exception){}
-        }
-        override fun onConfigureFailed(session:CameraCaptureSession){closePreview()}
-       },cameraHandler)
-      }catch(_:Exception){closePreview()}
-    }
-    override fun onDisconnected(device:CameraDevice){closePreview()}
-    override fun onError(device:CameraDevice,error:Int){closePreview()}
-   },cameraHandler)
-  }catch(_:Exception){status.text="Preview unavailable on this device"}
+   val i=Intent(Intent.ACTION_VIEW).apply{type="video/*";setDataAndType(MediaStore.Video.Media.EXTERNAL_CONTENT_URI,"video/*")}
+   startActivity(i)
+  }catch(e:Exception){Toast.makeText(this,"Open Gallery to view HDRG Camera recordings",Toast.LENGTH_LONG).show()}
  }
- private fun closePreview(){
-  try{previewSession?.close()}catch(_:Exception){}
-  previewSession=null
-  try{previewCamera?.close()}catch(_:Exception){}
-  previewCamera=null
- }
- private fun startRecord(){
-  if(recording)return
-  if(ContextCompat.checkSelfPermission(this,Manifest.permission.CAMERA)!=PackageManager.PERMISSION_GRANTED){requestNeededPermissions();return}
-  val includeAudio=audio.isChecked&&interval.selectedItemPosition==0
-  if(includeAudio&&ContextCompat.checkSelfPermission(this,Manifest.permission.RECORD_AUDIO)!=PackageManager.PERMISSION_GRANTED){requestNeededPermissions();status.text="Grant microphone permission first";return}
-  val seconds=when(interval.selectedItemPosition){1->1;2->2;3->5;4->10;5->30;else->0}
-  val sizes=intArrayOf(720,1080,2160)
-  closePreview()
-  val intent=Intent(this,CaptureService::class.java).apply{
-    action=CaptureService.START;putExtra("interval",seconds);putExtra("height",sizes[quality.selectedItemPosition]);putExtra("audio",includeAudio)
-  }
-  try{
-    ContextCompat.startForegroundService(this,intent)
-    recording=true;paused=false;pause.isEnabled=true;status.text="Recording started • Notification remains visible"
-  }catch(e:Exception){recording=false;status.text="Cannot start: ${e.message}";startPreview()}
- }
- private fun togglePause(){
-  if(!recording)return
-  val action=if(paused)CaptureService.RESUME else CaptureService.PAUSE
-  startService(Intent(this,CaptureService::class.java).apply{this.action=action})
-  paused=!paused
-  pause.text=if(paused)"RESUME" else "PAUSE"
-  status.text=if(paused)"Pause requested" else "Resume requested"
- }
- private fun stopRecord(){
-  startService(Intent(this,CaptureService::class.java).apply{action=CaptureService.STOP})
-  recording=false;paused=false;pause.isEnabled=false;pause.text="PAUSE"
-  status.text="Stopping • Saving recording to Movies/HDRG Camera"
-  Handler(Looper.getMainLooper()).postDelayed({startPreview()},1300)
- }
- override fun onResume(){super.onResume();if(preview.isAvailable&&!recording)startPreview()}
- override fun onPause(){super.onPause();closePreview()}
- override fun onDestroy(){closePreview();cameraThread.quitSafely();super.onDestroy()}
+ override fun onRequestPermissionsResult(requestCode:Int,permissions:Array<out String>,results:IntArray){super.onRequestPermissionsResult(requestCode,permissions,results);if(preview.isAvailable)openIdle()}
+ override fun onResume(){super.onResume();if(preview.isAvailable)attachSurface();active=CaptureService.running;if(active){shutter.text="■";timer.visibility=View.VISIBLE;pauseButton.visibility=View.VISIBLE;state.text="● RECORDING"}}
+ override fun onPause(){super.onPause();detachSurface()}
+ override fun onDestroy(){ui.removeCallbacks(updater);closeIdle();thread.quitSafely();super.onDestroy()}
 }
