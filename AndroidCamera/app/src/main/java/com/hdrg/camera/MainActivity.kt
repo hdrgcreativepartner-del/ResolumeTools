@@ -180,9 +180,23 @@ class MainActivity:Activity(){
   starting=true;closeIdle()
   handler.postDelayed({
    val intent=Intent(this,CaptureService::class.java).apply{action=CaptureService.START;putExtra("lens",lens);putExtra("height",quality);putExtra("interval",interval);putExtra("audio",audio);putExtra("stabilize",stabilized)}
-   try{ContextCompat.startForegroundService(this,intent);ui.post{active=true;starting=false;paused=false;elapsedStart=SystemClock.elapsedRealtime();state.text="● STARTING";timer.visibility=View.VISIBLE;pauseButton.visibility=View.VISIBLE;shutter.text="■";lensButton.alpha=.45f}}
+   try{ContextCompat.startForegroundService(this,intent);ui.post{starting=false;state.text="● STARTING";lensButton.alpha=.45f;ui.postDelayed({syncRecordingState()},600)}}
    catch(e:Exception){ui.post{starting=false;state.text="Failed to start";openIdle()}}
   },350)
+ }
+ private fun syncRecordingState(){
+  when(CaptureService.phase){
+   "RECORDING","PAUSED"->{
+    if(!active){elapsedStart=SystemClock.elapsedRealtime();pausedElapsed=0L}
+    active=true;paused=CaptureService.phase=="PAUSED"
+    state.text=if(paused)"PAUSED" else "● RECORDING"
+    timer.visibility=View.VISIBLE;pauseButton.visibility=View.VISIBLE
+    pauseButton.text=if(paused)"▶" else "Ⅱ";shutter.text="■"
+   }
+   "STARTING"->ui.postDelayed({syncRecordingState()},400)
+   "ERROR"->{active=false;starting=false;shutter.text="●";lensButton.alpha=1f;state.text="Recording failed: "+CaptureService.lastError.take(90);openIdle()}
+   else->{if(!active)ui.postDelayed({if(CaptureService.phase=="STARTING")syncRecordingState()},350)}
+  }
  }
  private fun stop(){
   command(CaptureService.STOP);active=false;paused=false;timer.visibility=View.INVISIBLE;pauseButton.visibility=View.INVISIBLE;pauseButton.text="Ⅱ";shutter.text="●";state.text="Saving to Gallery…";lensButton.alpha=1f
