@@ -87,24 +87,6 @@ class MainActivity:Activity(){
   state=action("READY").apply{textSize=11f;letterSpacing=.12f;setTextColor(Color.rgb(230,230,230))}
   val statusParams=FrameLayout.LayoutParams(-2,dp(38),Gravity.TOP or Gravity.CENTER_HORIZONTAL).apply{topMargin=dp(75)}
   root.addView(state,statusParams)
-  // Centered zoom chips remain above the recording controls.
-  val zoomBar=LinearLayout(this).apply{
-   gravity=Gravity.CENTER;setPadding(dp(8),dp(3),dp(8),dp(3))
-   background=android.graphics.drawable.GradientDrawable().apply{
-    setColor(Color.argb(145,10,10,10));cornerRadius=dp(28).toFloat()
-   }
-  }
-  for(z in listOf(1,2,3)){
-   val chip=action("${z}×").apply{textSize=13f;minimumWidth=dp(49);minimumHeight=dp(38)
-    setTextColor(if(z==1)Color.rgb(255,207,73) else Color.WHITE)
-    setOnClickListener{
-     if(!active){zoomRatio=z.toFloat();Toast.makeText(this@MainActivity,"Zoom control requires camera request integration",Toast.LENGTH_SHORT).show()}
-    }
-   }
-   zoomBar.addView(chip)
-  }
-  val zoomParams=FrameLayout.LayoutParams(-2,-2,Gravity.BOTTOM or Gravity.CENTER_HORIZONTAL).apply{bottomMargin=dp(200)}
-  root.addView(zoomBar,zoomParams)
   val footer=LinearLayout(this).apply{
    orientation=LinearLayout.VERTICAL;gravity=Gravity.CENTER_HORIZONTAL
    setPadding(dp(20),dp(8),dp(20),dp(26))
