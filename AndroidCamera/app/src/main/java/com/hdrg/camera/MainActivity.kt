@@ -62,10 +62,10 @@ class MainActivity:Activity(){
   root.addView(gridOverlay,FrameLayout.LayoutParams(-1,-1))
   val shade=View(this).apply{setBackgroundColor(Color.argb(85,0,0,0))}
   root.addView(shade,FrameLayout.LayoutParams(-1,dp(120),Gravity.TOP))
-  val top=LinearLayout(this).apply{orientation=LinearLayout.VERTICAL;setPadding(dp(20),dp(14),dp(20),0)}
+  val top=LinearLayout(this).apply{orientation=LinearLayout.VERTICAL;setPadding(dp(14),dp(10),dp(14),0)}
   val row=LinearLayout(this).apply{gravity=Gravity.CENTER_VERTICAL}
-  fun action(label:String):TextView=TextView(this).apply{text=label;setTextColor(Color.WHITE);textSize=16f;gravity=Gravity.CENTER;setPadding(dp(11),dp(9),dp(11),dp(9))}
-  val brand=action("HDRG  CAMERA").apply{textSize=17f;setTypeface(typeface,1)}
+  fun action(label:String):TextView=TextView(this).apply{text=label;setTextColor(Color.WHITE);textSize=16f;gravity=Gravity.CENTER;setPadding(dp(10),dp(12),dp(10),dp(12));minimumHeight=dp(48)}
+  val brand=action("HDRG  /  CAMERA").apply{textSize=15f;letterSpacing=.13f;setTypeface(typeface,1);gravity=Gravity.CENTER_VERTICAL or Gravity.LEFT}
   row.addView(brand,LinearLayout.LayoutParams(0,dp(48),1f))
   gridButton=action("▦").apply{contentDescription="Toggle grid";setOnClickListener{gridOverlay.gridVisible=!gridOverlay.gridVisible;setTextColor(if(gridOverlay.gridVisible)Color.rgb(58,222,233) else Color.WHITE)}}
   row.addView(gridButton)
@@ -76,23 +76,23 @@ class MainActivity:Activity(){
   lensButton=action("↻")
   row.addView(lensButton)
   top.addView(row)
-  state=action("● READY").apply{setTextColor(Color.rgb(190,213,234));textSize=12f;gravity=Gravity.LEFT}
+  state=action("READY  •  CAMERA").apply{setTextColor(Color.rgb(190,213,234));textSize=12f;gravity=Gravity.LEFT}
   top.addView(state)
   root.addView(top,FrameLayout.LayoutParams(-1,-2,Gravity.TOP))
-  val footer=LinearLayout(this).apply{orientation=LinearLayout.VERTICAL;setPadding(dp(18),dp(12),dp(18),dp(24));setBackgroundColor(Color.argb(210,3,8,15))}
-  modeButton=action("VIDEO     ·     TIMELAPSE").apply{textSize=14f}
+  val footer=LinearLayout(this).apply{orientation=LinearLayout.VERTICAL;setPadding(dp(18),dp(8),dp(18),dp(18));setBackgroundColor(Color.argb(178,3,8,15))}
+  modeButton=action("VIDEO     /     TIMELAPSE").apply{textSize=13f;letterSpacing=.12f}
   footer.addView(modeButton)
   timer=action("00:00").apply{textSize=15f;setTextColor(Color.rgb(255,105,114));visibility=View.INVISIBLE}
   footer.addView(timer)
   val controls=LinearLayout(this).apply{gravity=Gravity.CENTER_VERTICAL or Gravity.CENTER_HORIZONTAL}
-  val gallery=action("▣").apply{textSize=30f;setOnClickListener{openGallery()}}
-  shutter=action("●").apply{textSize=58f;setTextColor(Color.rgb(255,66,87));setOnClickListener{if(active)stop()else start()}}
-  pauseButton=action("Ⅱ").apply{textSize=29f;visibility=View.INVISIBLE;setOnClickListener{pauseOrResume()}}
+  val gallery=action("▣").apply{textSize=27f;setOnClickListener{openGallery()}}
+  shutter=action("●").apply{textSize=66f;setTextColor(Color.rgb(255,75,91));setOnClickListener{if(active)stop()else start()}}
+  pauseButton=action("Ⅱ").apply{textSize=27f;visibility=View.INVISIBLE;setOnClickListener{pauseOrResume()}}
   controls.addView(gallery,LinearLayout.LayoutParams(0,dp(75),1f))
   controls.addView(shutter,LinearLayout.LayoutParams(0,dp(90),1f))
   controls.addView(pauseButton,LinearLayout.LayoutParams(0,dp(75),1f))
   footer.addView(controls)
-  val hint=action("Tap ● to record  •  Background via ongoing notification").apply{textSize=11f;setTextColor(Color.rgb(174,195,213))}
+  val hint=action("RECORDING CONTINUES WITH VISIBLE NOTIFICATION").apply{textSize=10f;letterSpacing=.08f;setTextColor(Color.rgb(174,195,213))}
   footer.addView(hint)
   root.addView(footer,FrameLayout.LayoutParams(-1,-2,Gravity.BOTTOM))
   setContentView(root)
