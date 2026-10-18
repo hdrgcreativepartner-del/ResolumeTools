@@ -21,6 +21,7 @@ class CameraIcon(private val kind:String, private val tint:Int=Color.WHITE):Draw
    "flip"->{canvas.drawArc(3f,3f,21f,21f,205f,145f,false,pen);canvas.drawArc(3f,3f,21f,21f,25f,145f,false,pen);val p=Path().apply{moveTo(18f,4f);lineTo(21f,7f);lineTo(17f,8f);moveTo(6f,20f);lineTo(3f,17f);lineTo(7f,16f)};canvas.drawPath(p,pen)}
    "settings"->{canvas.drawLine(4f,7f,20f,7f,pen);canvas.drawLine(4f,17f,20f,17f,pen);canvas.drawCircle(9f,7f,2.5f,pen);canvas.drawCircle(16f,17f,2.5f,pen)}
    "stabilize"->{canvas.drawRoundRect(6f,4f,18f,20f,3f,3f,pen);canvas.drawLine(3f,8f,3f,16f,pen);canvas.drawLine(21f,8f,21f,16f,pen)}
+   "play"->{pen.style=Paint.Style.FILL;val p=Path().apply{moveTo(7f,4f);lineTo(20f,12f);lineTo(7f,20f);close()};canvas.drawPath(p,pen);pen.style=Paint.Style.STROKE}
    "pause"->{pen.style=Paint.Style.FILL;canvas.drawRoundRect(6f,4f,10f,20f,1f,1f,pen);canvas.drawRoundRect(14f,4f,18f,20f,1f,1f,pen);pen.style=Paint.Style.STROKE}
   }
   canvas.restoreToCount(save)
