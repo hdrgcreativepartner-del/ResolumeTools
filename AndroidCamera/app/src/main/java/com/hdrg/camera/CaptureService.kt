@@ -37,6 +37,11 @@ class CaptureService:Service(){
  private var lens=CameraCharacteristics.LENS_FACING_BACK
  private var cameraId=""
  private var stabilize=true
+ private var proIso=0
+ private var proShutterNs=0L
+ private var proFocus=-1f
+ private var proExposure=0
+ private var proWhiteBalance=CaptureRequest.CONTROL_AWB_MODE_AUTO
  override fun onBind(intent:Intent?):IBinder?=null
  override fun onCreate(){super.onCreate();(getSystemService(NOTIFICATION_SERVICE) as NotificationManager).createNotificationChannel(NotificationChannel(CHANNEL,"HDRG Camera Recording",NotificationManager.IMPORTANCE_LOW))}
  private fun notice(label:String):Notification{
@@ -60,6 +65,7 @@ class CaptureService:Service(){
      if(Build.VERSION.SDK_INT>=29)startForeground(17,notice("Preparing recording…"),type)else startForeground(17,notice("Preparing recording…"))
      lens=intent.getIntExtra("lens",CameraCharacteristics.LENS_FACING_BACK)
      stabilize=intent.getBooleanExtra("stabilize",true)
+     proIso=intent.getIntExtra("iso",0);proShutterNs=intent.getLongExtra("shutterNs",0L);proFocus=intent.getFloatExtra("focusDiopters",-1f);proExposure=intent.getIntExtra("exposureSteps",0);proWhiteBalance=intent.getIntExtra("whiteBalance",CaptureRequest.CONTROL_AWB_MODE_AUTO)
      handler.post{begin(intent.getIntExtra("interval",0),intent.getIntExtra("height",1080),includeAudio)}
     }catch(e:Exception){starting=false;phase="ERROR";lastError=e.message?:"Failed to start service";stopSelf()}
    }
@@ -76,6 +82,11 @@ class CaptureService:Service(){
    val targets=mutableListOf(recordSurface)
    if(previewSurface!=null&&previewSurface.isValid)targets.add(previewSurface)
    val request=dev.createCaptureRequest(CameraDevice.TEMPLATE_RECORD).apply{targets.forEach{addTarget(it)}
+    try{
+     val characteristics=(getSystemService(CAMERA_SERVICE) as CameraManager).getCameraCharacteristics(cameraId)
+     ProCamera.iso=proIso;ProCamera.shutterNs=proShutterNs;ProCamera.focusDiopters=proFocus
+     ProCamera.apply(this,characteristics,proExposure,proWhiteBalance)
+    }catch(_:Exception){}
     if(stabilize){try{val available=(getSystemService(CAMERA_SERVICE) as CameraManager).getCameraCharacteristics(cameraId).get(CameraCharacteristics.CONTROL_AVAILABLE_VIDEO_STABILIZATION_MODES) ?: intArrayOf();if(available.contains(CaptureRequest.CONTROL_VIDEO_STABILIZATION_MODE_ON)){set(CaptureRequest.CONTROL_VIDEO_STABILIZATION_MODE,CaptureRequest.CONTROL_VIDEO_STABILIZATION_MODE_ON);stabilizationSupported=true}}catch(_:Exception){}}
    }.build()
    @Suppress("DEPRECATION")
