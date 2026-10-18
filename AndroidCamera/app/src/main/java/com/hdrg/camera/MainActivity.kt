@@ -50,6 +50,8 @@ class MainActivity:Activity(){
  private var elapsedStart=0L
  private var pausedElapsed=0L
  private var zoomRatio=1f
+ private var exposureSteps=0
+ private var whiteBalanceMode=CaptureRequest.CONTROL_AWB_MODE_AUTO
  private val updater=object:Runnable{override fun run(){
   if(active&&!paused){val s=(SystemClock.elapsedRealtime()-elapsedStart)/1000;timer.text="%02d:%02d".format(s/60,s%60)}
   ui.postDelayed(this,1000)
@@ -89,6 +91,8 @@ class MainActivity:Activity(){
   stabilizeButton.setIcon("stabilize");top.addView(stabilizeButton)
   qualityButton=action("FHD").apply{contentDescription="Video quality";textSize=13f;setTypeface(typeface,1)}
   top.addView(qualityButton)
+  val proButton=action("PRO").apply{textSize=12f;contentDescription="Professional controls";setOnClickListener{showProControls()}}
+  top.addView(proButton)
   root.addView(top,FrameLayout.LayoutParams(-1,-2,Gravity.TOP))
   state=action("READY").apply{textSize=11f;letterSpacing=.12f;setTextColor(Color.rgb(230,230,230))}
   val statusParams=FrameLayout.LayoutParams(-2,dp(38),Gravity.TOP or Gravity.CENTER_HORIZONTAL).apply{topMargin=dp(75)}
@@ -155,6 +159,43 @@ class MainActivity:Activity(){
   ui.post(updater)
  }
  private fun TextView.setIcon(name:String){val icon=CameraIcon(name);icon.setBounds(0,0,dp(25),dp(25));setCompoundDrawables(null,icon,null,null)}
+ private fun applyProSettings(request:CaptureRequest.Builder){
+  try{request.set(CaptureRequest.CONTROL_AE_EXPOSURE_COMPENSATION,exposureSteps)}catch(_:Exception){}
+  try{request.set(CaptureRequest.CONTROL_AWB_MODE,whiteBalanceMode)}catch(_:Exception){}
+ }
+ private fun showProControls(){
+  if(active||starting){Toast.makeText(this,"Stop recording to adjust preview",Toast.LENGTH_SHORT).show();return}
+  val manager=getSystemService(CAMERA_SERVICE) as CameraManager
+  val id=manager.cameraIdList.firstOrNull{manager.getCameraCharacteristics(it).get(CameraCharacteristics.LENS_FACING)==lens}?:return
+  val characteristics=manager.getCameraCharacteristics(id)
+  val range=characteristics.get(CameraCharacteristics.CONTROL_AE_COMPENSATION_RANGE)
+  val min=range?.lower?:0;val max=range?.upper?:0
+  val panel=LinearLayout(this).apply{orientation=LinearLayout.VERTICAL;setPadding(dp(22),dp(12),dp(22),dp(12))}
+  val label=TextView(this).apply{text="Exposure compensation: $exposureSteps";textSize=16f;setTextColor(Color.WHITE)}
+  panel.addView(label)
+  val seek=SeekBar(this).apply{this.max=(max-min).coerceAtLeast(0);progress=(exposureSteps-min).coerceIn(0,this.max);isEnabled=max>min}
+  panel.addView(seek)
+  seek.setOnSeekBarChangeListener(object:SeekBar.OnSeekBarChangeListener{
+   override fun onProgressChanged(bar:SeekBar?,progress:Int,fromUser:Boolean){label.text="Exposure compensation: ${min+progress}"}
+   override fun onStartTrackingTouch(bar:SeekBar?){}
+   override fun onStopTrackingTouch(bar:SeekBar?){}
+  })
+  val modes=intArrayOf(CaptureRequest.CONTROL_AWB_MODE_AUTO,CaptureRequest.CONTROL_AWB_MODE_DAYLIGHT,CaptureRequest.CONTROL_AWB_MODE_CLOUDY_DAYLIGHT,CaptureRequest.CONTROL_AWB_MODE_INCANDESCENT)
+  val available=characteristics.get(CameraCharacteristics.CONTROL_AWB_AVAILABLE_MODES)?:intArrayOf(CaptureRequest.CONTROL_AWB_MODE_AUTO)
+  val names=arrayOf("Auto","Daylight","Cloudy","Tungsten")
+  val supported=modes.indices.filter{available.contains(modes[it])}
+  val spinner=Spinner(this)
+  spinner.adapter=ArrayAdapter(this,android.R.layout.simple_spinner_dropdown_item,supported.map{names[it]})
+  spinner.setSelection(supported.indexOfFirst{modes[it]==whiteBalanceMode}.coerceAtLeast(0))
+  panel.addView(TextView(this).apply{text="White balance";textSize=14f;setTextColor(Color.LTGRAY)})
+  panel.addView(spinner)
+  panel.addView(TextView(this).apply{text="ISO, shutter speed and manual focus require device-specific Camera2 controls and are not enabled in this build.";textSize=12f;setTextColor(Color.LTGRAY);setPadding(0,dp(16),0,0)})
+  AlertDialog.Builder(this).setTitle("PRO CONTROLS").setView(panel).setNegativeButton("Cancel",null).setPositiveButton("Apply"){_,_->
+   exposureSteps=(min+seek.progress).coerceIn(min,max)
+   if(supported.isNotEmpty())whiteBalanceMode=modes[supported[spinner.selectedItemPosition]]
+   closeIdle();openIdle()
+  }.show()
+ }
  private fun recordBackground(recording:Boolean)=GradientDrawable().apply{shape=if(recording)GradientDrawable.RECTANGLE else GradientDrawable.OVAL;cornerRadius=dp(18).toFloat();setColor(Color.rgb(245,65,78));setStroke(dp(5),Color.WHITE)}
  private fun dp(n:Int)=(resources.displayMetrics.density*n).toInt()
  private fun command(action:String){startService(Intent(this,CaptureService::class.java).apply{this.action=action})}
@@ -177,7 +218,7 @@ class MainActivity:Activity(){
   val manager=getSystemService(CAMERA_SERVICE) as CameraManager
   val id=manager.cameraIdList.firstOrNull{manager.getCameraCharacteristics(it).get(CameraCharacteristics.LENS_FACING)==lens}?:return
   try{manager.openCamera(id,object:CameraDevice.StateCallback(){
-   override fun onOpened(c:CameraDevice){idleCamera=c;val s=previewSurface?:return;c.createCaptureRequest(CameraDevice.TEMPLATE_PREVIEW).apply{addTarget(s);if(stabilized)try{set(CaptureRequest.CONTROL_VIDEO_STABILIZATION_MODE,CaptureRequest.CONTROL_VIDEO_STABILIZATION_MODE_ON)}catch(_:Exception){}}.also{builder->
+   override fun onOpened(c:CameraDevice){idleCamera=c;val s=previewSurface?:return;c.createCaptureRequest(CameraDevice.TEMPLATE_PREVIEW).apply{addTarget(s);applyProSettings(this);if(stabilized)try{set(CaptureRequest.CONTROL_VIDEO_STABILIZATION_MODE,CaptureRequest.CONTROL_VIDEO_STABILIZATION_MODE_ON)}catch(_:Exception){}}.also{builder->
     @Suppress("DEPRECATION") c.createCaptureSession(listOf(s),object:CameraCaptureSession.StateCallback(){
      override fun onConfigured(session:CameraCaptureSession){idleSession=session;try{session.setRepeatingRequest(builder.build(),null,handler)}catch(_:Exception){}}
      override fun onConfigureFailed(session:CameraCaptureSession){closeIdle()}
@@ -206,7 +247,7 @@ class MainActivity:Activity(){
     active=true;paused=CaptureService.phase=="PAUSED"
     state.text=if(paused)"PAUSED" else "● RECORDING"
     timer.visibility=View.VISIBLE;pauseButton.visibility=View.VISIBLE;lensButton.visibility=View.INVISIBLE
-    pauseButton.setIcon(if(paused)"flip" else "pause");shutter.background=recordBackground(true)
+    pauseButton.setIcon(if(paused)"play" else "pause");shutter.background=recordBackground(true)
    }
    "STARTING"->ui.postDelayed({syncRecordingState()},400)
    "ERROR"->{active=false;starting=false;shutter.background=recordBackground(false);lensButton.alpha=1f;state.text="Recording failed: "+CaptureService.lastError.take(90);openIdle()}
