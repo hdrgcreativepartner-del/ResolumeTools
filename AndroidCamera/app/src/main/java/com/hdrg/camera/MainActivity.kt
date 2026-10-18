@@ -65,7 +65,7 @@ class MainActivity:Activity(){
   fun action(label:String):TextView=TextView(this).apply{text=label;setTextColor(Color.WHITE);textSize=16f;gravity=Gravity.CENTER;setPadding(dp(11),dp(9),dp(11),dp(9))}
   val brand=action("HDRG  CAMERA").apply{textSize=17f;setTypeface(typeface,1)}
   row.addView(brand,LinearLayout.LayoutParams(0,dp(48),1f))
-  gridButton=action("▦").apply{contentDescription="Toggle grid";setOnClickListener{gridOverlay.enabled=!gridOverlay.enabled;setTextColor(if(gridOverlay.enabled)Color.rgb(58,222,233) else Color.WHITE)}}
+  gridButton=action("▦").apply{contentDescription="Toggle grid";setOnClickListener{gridOverlay.gridVisible=!gridOverlay.gridVisible;setTextColor(if(gridOverlay.gridVisible)Color.rgb(58,222,233) else Color.WHITE)}}
   row.addView(gridButton)
   stabilizeButton=action("STAB").apply{contentDescription="Toggle video stabilization";setTextColor(Color.rgb(58,222,233));setOnClickListener{if(!active){stabilized=!stabilized;setTextColor(if(stabilized)Color.rgb(58,222,233) else Color.WHITE);closeIdle();openIdle()}}}
   row.addView(stabilizeButton)
