@@ -46,6 +46,8 @@ class MainActivity:Activity(){
  private var paused=false
  private var starting=false
  private var elapsedStart=0L
+ private var pausedElapsed=0L
+ private var zoomRatio=1f
  private val updater=object:Runnable{override fun run(){
   if(active&&!paused){val s=(SystemClock.elapsedRealtime()-elapsedStart)/1000;timer.text="%02d:%02d".format(s/60,s%60)}
   ui.postDelayed(this,1000)
@@ -67,7 +69,7 @@ class MainActivity:Activity(){
   row.addView(brand,LinearLayout.LayoutParams(0,dp(48),1f))
   gridButton=action("▦").apply{contentDescription="Toggle grid";setOnClickListener{gridOverlay.gridVisible=!gridOverlay.gridVisible;setTextColor(if(gridOverlay.gridVisible)Color.rgb(58,222,233) else Color.WHITE)}}
   row.addView(gridButton)
-  stabilizeButton=action("STAB").apply{contentDescription="Toggle video stabilization";setTextColor(Color.rgb(58,222,233));setOnClickListener{if(!active){stabilized=!stabilized;setTextColor(if(stabilized)Color.rgb(58,222,233) else Color.WHITE);closeIdle();openIdle()}}}
+  stabilizeButton=action("STAB").apply{contentDescription="Toggle requested video stabilization when supported";setTextColor(Color.rgb(58,222,233));setOnClickListener{if(!active){stabilized=!stabilized;setTextColor(if(stabilized)Color.rgb(58,222,233) else Color.WHITE);closeIdle();openIdle()}}}
   row.addView(stabilizeButton)
   qualityButton=action("1080p")
   row.addView(qualityButton)
@@ -153,24 +155,24 @@ class MainActivity:Activity(){
  }
  private fun closeIdle(){try{idleSession?.close()}catch(_:Exception){};idleSession=null;try{idleCamera?.close()}catch(_:Exception){};idleCamera=null}
  private fun start(){
-  if(active||starting)return
+  if(active||starting||CaptureService.phase=="SAVING"||CaptureService.phase=="STARTING")return
   if(checkSelfPermission(Manifest.permission.CAMERA)!=PackageManager.PERMISSION_GRANTED){ActivityCompat.requestPermissions(this,arrayOf(Manifest.permission.CAMERA),1);return}
   if(audio&&checkSelfPermission(Manifest.permission.RECORD_AUDIO)!=PackageManager.PERMISSION_GRANTED){ActivityCompat.requestPermissions(this,arrayOf(Manifest.permission.RECORD_AUDIO),1);return}
   starting=true;closeIdle()
   handler.postDelayed({
    val intent=Intent(this,CaptureService::class.java).apply{action=CaptureService.START;putExtra("lens",lens);putExtra("height",quality);putExtra("interval",interval);putExtra("audio",audio);putExtra("stabilize",stabilized)}
-   try{ContextCompat.startForegroundService(this,intent);ui.post{active=true;starting=false;paused=false;elapsedStart=SystemClock.elapsedRealtime();state.text="● RECORDING";timer.visibility=View.VISIBLE;pauseButton.visibility=View.VISIBLE;shutter.text="■";lensButton.alpha=.45f}}
+   try{ContextCompat.startForegroundService(this,intent);ui.post{active=true;starting=false;paused=false;elapsedStart=SystemClock.elapsedRealtime();state.text="● STARTING";timer.visibility=View.VISIBLE;pauseButton.visibility=View.VISIBLE;shutter.text="■";lensButton.alpha=.45f}}
    catch(e:Exception){ui.post{starting=false;state.text="Failed to start";openIdle()}}
   },350)
  }
  private fun stop(){
   command(CaptureService.STOP);active=false;paused=false;timer.visibility=View.INVISIBLE;pauseButton.visibility=View.INVISIBLE;pauseButton.text="Ⅱ";shutter.text="●";state.text="Saving to Gallery…";lensButton.alpha=1f
-  ui.postDelayed({if(!CaptureService.running){state.text="READY";openIdle()}},1800)
+  ui.postDelayed({if(!CaptureService.running){state.text=if(CaptureService.phase=="ERROR")"Recording failed" else "READY";openIdle()}},1800)
  }
  private fun pauseOrResume(){if(!active)return;command(if(paused)CaptureService.RESUME else CaptureService.PAUSE);paused=!paused;pauseButton.text=if(paused)"▶" else "Ⅱ";state.text=if(paused)"PAUSED" else "● RECORDING"}
  private fun openGallery(){startActivity(Intent(this,GalleryActivity::class.java))}
  override fun onRequestPermissionsResult(requestCode:Int,permissions:Array<out String>,results:IntArray){super.onRequestPermissionsResult(requestCode,permissions,results);if(preview.isAvailable)openIdle()}
- override fun onResume(){super.onResume();if(preview.isAvailable)attachSurface();active=CaptureService.running;if(active){shutter.text="■";timer.visibility=View.VISIBLE;pauseButton.visibility=View.VISIBLE;state.text="● RECORDING"}}
+ override fun onResume(){super.onResume();if(preview.isAvailable)attachSurface();active=CaptureService.running||CaptureService.phase=="STARTING";if(active){shutter.text="■";timer.visibility=View.VISIBLE;pauseButton.visibility=View.VISIBLE;state.text=if(CaptureService.phase=="PAUSED")"PAUSED" else if(CaptureService.phase=="STARTING")"● STARTING" else "● RECORDING"}}
  override fun onPause(){super.onPause();detachSurface()}
  override fun onDestroy(){ui.removeCallbacks(updater);closeIdle();thread.quitSafely();super.onDestroy()}
 }
