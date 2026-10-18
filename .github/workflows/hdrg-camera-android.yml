@@ -28,16 +28,16 @@ jobs:
         working-directory: AndroidCamera
         run: gradle --no-daemon :app:assembleDebug
       - name: Prepare distributable APK
-        run: cp AndroidCamera/app/build/outputs/apk/debug/app-debug.apk HDRG-Camera-v0.4-debug.apk
+        run: cp AndroidCamera/app/build/outputs/apk/debug/app-debug.apk HDRG-Camera-v0.5-beta-debug.apk
       - uses: actions/upload-artifact@v4
         with:
           name: HDRG-Camera-Debug-APK
-          path: HDRG-Camera-v0.4-debug.apk
+          path: HDRG-Camera-v0.5-beta-debug.apk
           if-no-files-found: error
       - name: Publish downloadable APK release
         shell: bash
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
-          gh release view "hdrg-camera-v0.4.0" >/dev/null 2>&1 || gh release create "hdrg-camera-v0.4.0" --title "HDRG Camera v0.4 Beta" --notes "Android debug beta APK: full-screen camera UI, front/rear camera selection, recording preview surface, audio, pause/resume, time-lapse, gallery. Foreground notification active; on-device test required."
-          gh release upload "hdrg-camera-v0.4.0" HDRG-Camera-v0.4-debug.apk --clobber
+          gh release view "hdrg-camera-v0.5-beta.0" >/dev/null 2>&1 || gh release create "hdrg-camera-v0.5-beta.0" --title "HDRG Camera v0.5-beta Beta" --notes "Android debug beta APK: full-screen camera UI, front/rear camera selection, recording preview surface, audio, pause/resume, time-lapse, gallery. Foreground notification active; on-device test required."
+          gh release upload "hdrg-camera-v0.5-beta.0" HDRG-Camera-v0.5-beta-debug.apk --clobber
