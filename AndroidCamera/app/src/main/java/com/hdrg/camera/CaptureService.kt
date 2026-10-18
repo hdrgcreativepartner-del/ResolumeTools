@@ -31,6 +31,7 @@ class CaptureService:Service(){
  private var starting=false
  private var lens=CameraCharacteristics.LENS_FACING_BACK
  private var cameraId=""
+ private var stabilize=true
  override fun onBind(intent:Intent?):IBinder?=null
  override fun onCreate(){super.onCreate();(getSystemService(NOTIFICATION_SERVICE) as NotificationManager).createNotificationChannel(NotificationChannel(CHANNEL,"HDRG Camera Recording",NotificationManager.IMPORTANCE_LOW))}
  private fun notice(label:String):Notification{
@@ -53,6 +54,7 @@ class CaptureService:Service(){
     try{
      if(Build.VERSION.SDK_INT>=29)startForeground(17,notice("Preparing recording…"),type)else startForeground(17,notice("Preparing recording…"))
      lens=intent.getIntExtra("lens",CameraCharacteristics.LENS_FACING_BACK)
+     stabilize=intent.getBooleanExtra("stabilize",true)
      handler.post{begin(intent.getIntExtra("interval",0),intent.getIntExtra("height",1080),includeAudio)}
     }catch(_:Exception){starting=false;stopSelf()}
    }
@@ -68,7 +70,9 @@ class CaptureService:Service(){
    val previewSurface=if(forceNoPreview)null else CameraPreviewBridge.surface
    val targets=mutableListOf(recordSurface)
    if(previewSurface!=null&&previewSurface.isValid)targets.add(previewSurface)
-   val request=dev.createCaptureRequest(CameraDevice.TEMPLATE_RECORD).apply{targets.forEach{addTarget(it)}}.build()
+   val request=dev.createCaptureRequest(CameraDevice.TEMPLATE_RECORD).apply{targets.forEach{addTarget(it)}
+    if(stabilize){try{val available=(getSystemService(CAMERA_SERVICE) as CameraManager).getCameraCharacteristics(cameraId).get(CameraCharacteristics.CONTROL_AVAILABLE_VIDEO_STABILIZATION_MODES) ?: intArrayOf();if(available.contains(CaptureRequest.CONTROL_VIDEO_STABILIZATION_MODE_ON))set(CaptureRequest.CONTROL_VIDEO_STABILIZATION_MODE,CaptureRequest.CONTROL_VIDEO_STABILIZATION_MODE_ON)}catch(_:Exception){}}
+   }.build()
    @Suppress("DEPRECATION")
    dev.createCaptureSession(targets,object:CameraCaptureSession.StateCallback(){
     override fun onConfigured(s:CameraCaptureSession){session=s;try{s.setRepeatingRequest(request,null,handler);if(!recording){rec.start();recording=true;running=true;starting=false;update("Recording · tap Stop to save")}}catch(_:Exception){finish()}}
