@@ -206,6 +206,7 @@ class MainActivity:Activity(){
   val shutterSelector=addSelector("Shutter speed",shutterValues.map{if(it==0L)"Auto" else "1/"+(1_000_000_000L/it)},shutterValues.indexOf(ProCamera.shutterNs).coerceAtLeast(0))
   val focusValues=if(focusMax>0f)listOf(-1f,0f,focusMax*.1f,focusMax*.25f,focusMax*.5f,focusMax) else listOf(-1f)
   val focusSelector=addSelector("Focus",focusValues.mapIndexed{i,_->when(i){0->"Auto";1->"Infinity";else->"Manual "+(i-1)}},focusValues.indexOf(ProCamera.focusDiopters).coerceAtLeast(0))
+  panel.addView(TextView(this).apply{text="Manual exposure requires both ISO and shutter to be selected. Auto on either keeps auto exposure.";textSize=12f;setTextColor(Color.LTGRAY)})
   if(!manual)panel.addView(TextView(this).apply{text="Manual ISO/shutter is unavailable on this camera.";setTextColor(Color.LTGRAY)})
   if(focusMax<=0f)panel.addView(TextView(this).apply{text="Manual focus is unavailable on this lens.";setTextColor(Color.LTGRAY)})
   AlertDialog.Builder(this).setTitle("PRO CONTROLS").setView(panel).setNegativeButton("Cancel",null).setPositiveButton("Apply"){_,_->
