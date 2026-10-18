@@ -20,6 +20,8 @@ class CaptureService:Service(){
  companion object{
   const val START="HDRG_START";const val STOP="HDRG_STOP";const val PAUSE="HDRG_PAUSE";const val RESUME="HDRG_RESUME";const val ATTACH="HDRG_ATTACH";const val DETACH="HDRG_DETACH";const val CHANNEL="hdrg_camera_capture"
   @Volatile var running=false
+  @Volatile var phase="IDLE"
+  @Volatile var lastError=""
  }
  private val thread=HandlerThread("HDRGRecord").apply{start()}
  private val handler=Handler(thread.looper)
@@ -29,6 +31,9 @@ class CaptureService:Service(){
  private var output:File?=null
  private var recording=false
  private var starting=false
+ private var finishing=false
+ private var isPaused=false
+ private var stabilizationSupported=false
  private var lens=CameraCharacteristics.LENS_FACING_BACK
  private var cameraId=""
  private var stabilize=true
@@ -42,13 +47,13 @@ class CaptureService:Service(){
  override fun onStartCommand(intent:Intent?,flags:Int,startId:Int):Int{
   when(intent?.action){
    STOP->handler.post{finish()}
-   PAUSE->handler.post{if(recording)try{recorder?.pause();update("Paused · tap Stop to save")}catch(_:Exception){}}
-   RESUME->handler.post{if(recording)try{recorder?.resume();update("Recording · tap Stop to save")}catch(_:Exception){}}
+   PAUSE->handler.post{if(recording&&!isPaused)try{recorder?.pause();isPaused=true;phase="PAUSED";update("Paused · tap Stop to save")}catch(e:Exception){lastError=e.message?:"Pause failed"}}
+   RESUME->handler.post{if(recording&&isPaused)try{recorder?.resume();isPaused=false;phase="RECORDING";update("Recording · tap Stop to save")}catch(e:Exception){lastError=e.message?:"Resume failed"}}
    ATTACH->handler.post{if(recording)configureSession()}
    DETACH->handler.post{if(recording)configureSession(true)}
    START->{
-    if(running||starting)return START_NOT_STICKY
-    starting=true
+    if(running||starting||finishing)return START_NOT_STICKY
+    starting=true;phase="STARTING";lastError=""
     val includeAudio=intent.getBooleanExtra("audio",false)
     val type=if(includeAudio)ServiceInfo.FOREGROUND_SERVICE_TYPE_CAMERA or ServiceInfo.FOREGROUND_SERVICE_TYPE_MICROPHONE else ServiceInfo.FOREGROUND_SERVICE_TYPE_CAMERA
     try{
@@ -56,7 +61,7 @@ class CaptureService:Service(){
      lens=intent.getIntExtra("lens",CameraCharacteristics.LENS_FACING_BACK)
      stabilize=intent.getBooleanExtra("stabilize",true)
      handler.post{begin(intent.getIntExtra("interval",0),intent.getIntExtra("height",1080),includeAudio)}
-    }catch(_:Exception){starting=false;stopSelf()}
+    }catch(e:Exception){starting=false;phase="ERROR";lastError=e.message?:"Failed to start service";stopSelf()}
    }
   }
   return START_NOT_STICKY
@@ -71,11 +76,11 @@ class CaptureService:Service(){
    val targets=mutableListOf(recordSurface)
    if(previewSurface!=null&&previewSurface.isValid)targets.add(previewSurface)
    val request=dev.createCaptureRequest(CameraDevice.TEMPLATE_RECORD).apply{targets.forEach{addTarget(it)}
-    if(stabilize){try{val available=(getSystemService(CAMERA_SERVICE) as CameraManager).getCameraCharacteristics(cameraId).get(CameraCharacteristics.CONTROL_AVAILABLE_VIDEO_STABILIZATION_MODES) ?: intArrayOf();if(available.contains(CaptureRequest.CONTROL_VIDEO_STABILIZATION_MODE_ON))set(CaptureRequest.CONTROL_VIDEO_STABILIZATION_MODE,CaptureRequest.CONTROL_VIDEO_STABILIZATION_MODE_ON)}catch(_:Exception){}}
+    if(stabilize){try{val available=(getSystemService(CAMERA_SERVICE) as CameraManager).getCameraCharacteristics(cameraId).get(CameraCharacteristics.CONTROL_AVAILABLE_VIDEO_STABILIZATION_MODES) ?: intArrayOf();if(available.contains(CaptureRequest.CONTROL_VIDEO_STABILIZATION_MODE_ON)){set(CaptureRequest.CONTROL_VIDEO_STABILIZATION_MODE,CaptureRequest.CONTROL_VIDEO_STABILIZATION_MODE_ON);stabilizationSupported=true}}catch(_:Exception){}}
    }.build()
    @Suppress("DEPRECATION")
    dev.createCaptureSession(targets,object:CameraCaptureSession.StateCallback(){
-    override fun onConfigured(s:CameraCaptureSession){session=s;try{s.setRepeatingRequest(request,null,handler);if(!recording){rec.start();recording=true;running=true;starting=false;update("Recording · tap Stop to save")}}catch(_:Exception){finish()}}
+    override fun onConfigured(s:CameraCaptureSession){session=s;try{s.setRepeatingRequest(request,null,handler);if(!recording){rec.start();recording=true;running=true;starting=false;phase="RECORDING";update("Recording · tap Stop to save")}}catch(_:Exception){finish()}}
     override fun onConfigureFailed(s:CameraCaptureSession){finish()}
    },handler)
   }catch(_:Exception){finish()}
@@ -116,16 +121,17 @@ class CaptureService:Service(){
   }
  }
  private fun finish(){
-  starting=false
+  if(finishing)return
+  finishing=true;phase="SAVING";starting=false
   try{session?.stopRepeating();session?.abortCaptures()}catch(_:Exception){}
   try{session?.close()}catch(_:Exception){};session=null
   var valid=recording
   if(recording)try{recorder?.stop()}catch(_:Exception){valid=false}
-  recording=false;running=false
+  recording=false;running=false;isPaused=false
   try{recorder?.reset();recorder?.release()}catch(_:Exception){};recorder=null
   try{camera?.close()}catch(_:Exception){};camera=null
   if(valid)output?.let{export(it)}else output?.delete()
-  output=null;stopForeground(STOP_FOREGROUND_REMOVE);stopSelf()
+  output=null;phase=if(valid)"IDLE" else "ERROR";finishing=false;stopForeground(STOP_FOREGROUND_REMOVE);stopSelf()
  }
- override fun onDestroy(){running=false;try{session?.close();camera?.close();recorder?.release()}catch(_:Exception){};thread.quitSafely();super.onDestroy()}
+ override fun onDestroy(){running=false;phase="IDLE";try{session?.close();camera?.close();recorder?.release()}catch(_:Exception){};thread.quitSafely();super.onDestroy()}
 }
