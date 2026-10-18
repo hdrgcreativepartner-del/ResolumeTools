@@ -111,10 +111,12 @@ class MainActivity:Activity(){
   controls.addView(gallery,LinearLayout.LayoutParams(0,dp(76),1f))
   val center=LinearLayout(this).apply{gravity=Gravity.CENTER;addView(shutter,LinearLayout.LayoutParams(dp(76),dp(76)))}
   controls.addView(center,LinearLayout.LayoutParams(0,dp(88),1f))
-  controls.addView(pauseButton,LinearLayout.LayoutParams(0,dp(76),1f))
-  footer.addView(controls)
   lensButton=action("⟳").apply{textSize=25f;contentDescription="Switch front and rear camera"}
-  footer.addView(lensButton,LinearLayout.LayoutParams(dp(56),dp(46)))
+  val right=FrameLayout(this)
+  right.addView(lensButton,FrameLayout.LayoutParams(dp(56),dp(56),Gravity.CENTER))
+  right.addView(pauseButton,FrameLayout.LayoutParams(dp(56),dp(56),Gravity.CENTER))
+  controls.addView(right,LinearLayout.LayoutParams(0,dp(76),1f))
+  footer.addView(controls)
   root.addView(footer,FrameLayout.LayoutParams(-1,-2,Gravity.BOTTOM))
   setContentView(root)
   qualityButton.setOnClickListener{
@@ -192,7 +194,7 @@ class MainActivity:Activity(){
     if(!active){elapsedStart=SystemClock.elapsedRealtime();pausedElapsed=0L}
     active=true;paused=CaptureService.phase=="PAUSED"
     state.text=if(paused)"PAUSED" else "● RECORDING"
-    timer.visibility=View.VISIBLE;pauseButton.visibility=View.VISIBLE
+    timer.visibility=View.VISIBLE;pauseButton.visibility=View.VISIBLE;lensButton.visibility=View.INVISIBLE
     pauseButton.text=if(paused)"▶" else "Ⅱ";shutter.text="■"
    }
    "STARTING"->ui.postDelayed({syncRecordingState()},400)
@@ -201,13 +203,13 @@ class MainActivity:Activity(){
   }
  }
  private fun stop(){
-  command(CaptureService.STOP);active=false;paused=false;timer.visibility=View.INVISIBLE;pauseButton.visibility=View.INVISIBLE;pauseButton.text="Ⅱ";shutter.text="●";state.text="Saving to Gallery…";lensButton.alpha=1f
+  command(CaptureService.STOP);active=false;paused=false;timer.visibility=View.INVISIBLE;pauseButton.visibility=View.INVISIBLE;lensButton.visibility=View.VISIBLE;pauseButton.text="Ⅱ";shutter.text="●";state.text="Saving to Gallery…";lensButton.alpha=1f
   ui.postDelayed({if(!CaptureService.running){state.text=if(CaptureService.phase=="ERROR")"Recording failed" else "READY";openIdle()}},1800)
  }
  private fun pauseOrResume(){if(!active)return;command(if(paused)CaptureService.RESUME else CaptureService.PAUSE);paused=!paused;pauseButton.text=if(paused)"▶" else "Ⅱ";state.text=if(paused)"PAUSED" else "● RECORDING"}
  private fun openGallery(){startActivity(Intent(this,GalleryActivity::class.java))}
  override fun onRequestPermissionsResult(requestCode:Int,permissions:Array<out String>,results:IntArray){super.onRequestPermissionsResult(requestCode,permissions,results);if(preview.isAvailable)openIdle()}
- override fun onResume(){super.onResume();if(preview.isAvailable)attachSurface();active=CaptureService.running||CaptureService.phase=="STARTING";if(active){shutter.text="■";timer.visibility=View.VISIBLE;pauseButton.visibility=View.VISIBLE;state.text=if(CaptureService.phase=="PAUSED")"PAUSED" else if(CaptureService.phase=="STARTING")"● STARTING" else "● RECORDING"}}
+ override fun onResume(){super.onResume();if(preview.isAvailable)attachSurface();active=CaptureService.running||CaptureService.phase=="STARTING";if(active){shutter.text="■";timer.visibility=View.VISIBLE;pauseButton.visibility=View.VISIBLE;lensButton.visibility=View.INVISIBLE;state.text=if(CaptureService.phase=="PAUSED")"PAUSED" else if(CaptureService.phase=="STARTING")"● STARTING" else "● RECORDING"}}
  override fun onPause(){super.onPause();detachSurface()}
  override fun onDestroy(){ui.removeCallbacks(updater);closeIdle();thread.quitSafely();super.onDestroy()}
 }
