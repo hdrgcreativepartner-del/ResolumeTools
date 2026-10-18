@@ -61,7 +61,11 @@ class MainActivity:Activity(){
   preview=TextureView(this)
   root.addView(preview,FrameLayout.LayoutParams(-1,-1))
   gridOverlay=GridOverlay(this)
-  root.addView(gridOverlay,FrameLayout.LayoutParams(-1,-1))
+  val viewfinder=FrameLayout(this)
+  root.removeView(preview)
+  viewfinder.addView(preview,FrameLayout.LayoutParams(-1,-1))
+  viewfinder.addView(gridOverlay,FrameLayout.LayoutParams(-1,-1))
+  root.addView(viewfinder,FrameLayout.LayoutParams(-1,-1))
   // iOS-inspired immersive camera chrome. Keep the existing Camera2 preview and recording pipeline.
   val shade=View(this).apply{setBackgroundColor(Color.argb(75,0,0,0))}
   root.addView(shade,FrameLayout.LayoutParams(-1,dp(100),Gravity.TOP))
@@ -74,15 +78,15 @@ class MainActivity:Activity(){
   }
   val brand=action("HDRG / CAMERA").apply{textSize=13f;letterSpacing=.2f;setTypeface(typeface,1);gravity=Gravity.CENTER_VERTICAL or Gravity.LEFT}
   top.addView(brand,LinearLayout.LayoutParams(0,dp(48),1f))
-  gridButton=action("▦").apply{contentDescription="Grid";setOnClickListener{
+  gridButton=action("").apply{contentDescription="Grid";setOnClickListener{
    gridOverlay.gridVisible=!gridOverlay.gridVisible
    setTextColor(if(gridOverlay.gridVisible)Color.rgb(255,207,73) else Color.WHITE)
   }}
-  top.addView(gridButton)
-  stabilizeButton=action("STB").apply{contentDescription="Stabilization";textSize=12f;setTextColor(Color.rgb(255,207,73));setOnClickListener{
+  gridButton.setIcon("grid");top.addView(gridButton)
+  stabilizeButton=action("").apply{contentDescription="Stabilization";textSize=12f;setTextColor(Color.rgb(255,207,73));setOnClickListener{
    if(!active){stabilized=!stabilized;setTextColor(if(stabilized)Color.rgb(255,207,73) else Color.WHITE);closeIdle();openIdle()}
   }}
-  top.addView(stabilizeButton)
+  stabilizeButton.setIcon("stabilize");top.addView(stabilizeButton)
   qualityButton=action("FHD").apply{contentDescription="Video quality";textSize=13f;setTypeface(typeface,1)}
   top.addView(qualityButton)
   root.addView(top,FrameLayout.LayoutParams(-1,-2,Gravity.TOP))
@@ -99,7 +103,7 @@ class MainActivity:Activity(){
   timer=action("00:00").apply{textSize=15f;setTextColor(Color.rgb(255,77,84));visibility=View.INVISIBLE}
   footer.addView(timer,LinearLayout.LayoutParams(-1,dp(34)))
   val controls=LinearLayout(this).apply{gravity=Gravity.CENTER_VERTICAL}
-  val gallery=action("▣").apply{textSize=29f;contentDescription="Gallery";setOnClickListener{openGallery()}}
+  val gallery=action("").apply{textSize=29f;contentDescription="Gallery";setOnClickListener{openGallery()}}
   shutter=action("").apply{
    textSize=55f;setTextColor(Color.rgb(246,58,69));contentDescription="Record or stop"
    setOnClickListener{if(active)stop()else start()}
@@ -107,17 +111,22 @@ class MainActivity:Activity(){
     setColor(Color.rgb(245,65,78));shape=android.graphics.drawable.GradientDrawable.OVAL;setStroke(dp(5),Color.WHITE)
    }
   }
-  pauseButton=action("Ⅱ").apply{textSize=28f;visibility=View.INVISIBLE;contentDescription="Pause or resume";setOnClickListener{pauseOrResume()}}
-  controls.addView(gallery,LinearLayout.LayoutParams(0,dp(76),1f))
+  pauseButton=action("").apply{textSize=28f;visibility=View.INVISIBLE;contentDescription="Pause or resume";setOnClickListener{pauseOrResume()}}
+  gallery.setIcon("gallery");controls.addView(gallery,LinearLayout.LayoutParams(0,dp(76),1f))
   val center=LinearLayout(this).apply{gravity=Gravity.CENTER;addView(shutter,LinearLayout.LayoutParams(dp(76),dp(76)))}
   controls.addView(center,LinearLayout.LayoutParams(0,dp(88),1f))
-  lensButton=action("⟳").apply{textSize=25f;contentDescription="Switch front and rear camera"}
+  lensButton=action("").apply{textSize=25f;contentDescription="Switch front and rear camera"}
   val right=FrameLayout(this)
+  lensButton.setIcon("flip");pauseButton.setIcon("pause")
   right.addView(lensButton,FrameLayout.LayoutParams(dp(56),dp(56),Gravity.CENTER))
   right.addView(pauseButton,FrameLayout.LayoutParams(dp(56),dp(56),Gravity.CENTER))
   controls.addView(right,LinearLayout.LayoutParams(0,dp(76),1f))
   footer.addView(controls)
   root.addView(footer,FrameLayout.LayoutParams(-1,-2,Gravity.BOTTOM))
+  footer.addOnLayoutChangeListener{_,_,_,_,_,_,_,_,_->
+   val lp=viewfinder.layoutParams as FrameLayout.LayoutParams
+   if(lp.bottomMargin!=footer.height){lp.bottomMargin=footer.height;viewfinder.layoutParams=lp}
+  }
   setContentView(root)
   qualityButton.setOnClickListener{
    if(active)return@setOnClickListener
@@ -145,6 +154,7 @@ class MainActivity:Activity(){
   if(missing.isNotEmpty())ActivityCompat.requestPermissions(this,missing.toTypedArray(),1)
   ui.post(updater)
  }
+ private fun TextView.setIcon(name:String){val icon=CameraIcon(name);icon.setBounds(0,0,dp(25),dp(25));setCompoundDrawables(null,icon,null,null)}
  private fun recordBackground(recording:Boolean)=GradientDrawable().apply{shape=if(recording)GradientDrawable.RECTANGLE else GradientDrawable.OVAL;cornerRadius=dp(18).toFloat();setColor(Color.rgb(245,65,78));setStroke(dp(5),Color.WHITE)}
  private fun dp(n:Int)=(resources.displayMetrics.density*n).toInt()
  private fun command(action:String){startService(Intent(this,CaptureService::class.java).apply{this.action=action})}
@@ -196,7 +206,7 @@ class MainActivity:Activity(){
     active=true;paused=CaptureService.phase=="PAUSED"
     state.text=if(paused)"PAUSED" else "● RECORDING"
     timer.visibility=View.VISIBLE;pauseButton.visibility=View.VISIBLE;lensButton.visibility=View.INVISIBLE
-    pauseButton.text=if(paused)"▶" else "Ⅱ";shutter.background=recordBackground(true)
+    pauseButton.setIcon(if(paused)"flip" else "pause");shutter.background=recordBackground(true)
    }
    "STARTING"->ui.postDelayed({syncRecordingState()},400)
    "ERROR"->{active=false;starting=false;shutter.background=recordBackground(false);lensButton.alpha=1f;state.text="Recording failed: "+CaptureService.lastError.take(90);openIdle()}
@@ -204,13 +214,13 @@ class MainActivity:Activity(){
   }
  }
  private fun stop(){
-  command(CaptureService.STOP);active=false;paused=false;timer.visibility=View.INVISIBLE;pauseButton.visibility=View.INVISIBLE;lensButton.visibility=View.VISIBLE;pauseButton.text="Ⅱ";shutter.text="●";state.text="Saving to Gallery…";lensButton.alpha=1f
+  command(CaptureService.STOP);active=false;paused=false;timer.visibility=View.INVISIBLE;pauseButton.visibility=View.INVISIBLE;lensButton.visibility=View.VISIBLE;pauseButton.setIcon("pause");shutter.background=recordBackground(false);state.text="Saving to Gallery…";lensButton.alpha=1f
   ui.postDelayed({if(!CaptureService.running){state.text=if(CaptureService.phase=="ERROR")"Recording failed" else "READY";openIdle()}},1800)
  }
  private fun pauseOrResume(){if(!active)return;command(if(paused)CaptureService.RESUME else CaptureService.PAUSE);paused=!paused;pauseButton.text=if(paused)"▶" else "Ⅱ";state.text=if(paused)"PAUSED" else "● RECORDING"}
  private fun openGallery(){startActivity(Intent(this,GalleryActivity::class.java))}
  override fun onRequestPermissionsResult(requestCode:Int,permissions:Array<out String>,results:IntArray){super.onRequestPermissionsResult(requestCode,permissions,results);if(preview.isAvailable)openIdle()}
- override fun onResume(){super.onResume();if(preview.isAvailable)attachSurface();active=CaptureService.running||CaptureService.phase=="STARTING";if(active){shutter.text="■";timer.visibility=View.VISIBLE;pauseButton.visibility=View.VISIBLE;lensButton.visibility=View.INVISIBLE;state.text=if(CaptureService.phase=="PAUSED")"PAUSED" else if(CaptureService.phase=="STARTING")"● STARTING" else "● RECORDING"}}
+ override fun onResume(){super.onResume();if(preview.isAvailable)attachSurface();active=CaptureService.running||CaptureService.phase=="STARTING";if(active){shutter.background=recordBackground(true);timer.visibility=View.VISIBLE;pauseButton.visibility=View.VISIBLE;lensButton.visibility=View.INVISIBLE;state.text=if(CaptureService.phase=="PAUSED")"PAUSED" else if(CaptureService.phase=="STARTING")"● STARTING" else "● RECORDING"}}
  override fun onPause(){super.onPause();detachSurface()}
  override fun onDestroy(){ui.removeCallbacks(updater);closeIdle();thread.quitSafely();super.onDestroy()}
 }
