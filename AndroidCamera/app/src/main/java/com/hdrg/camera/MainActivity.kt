@@ -60,40 +60,59 @@ class MainActivity:Activity(){
   root.addView(preview,FrameLayout.LayoutParams(-1,-1))
   gridOverlay=GridOverlay(this)
   root.addView(gridOverlay,FrameLayout.LayoutParams(-1,-1))
-  val shade=View(this).apply{setBackgroundColor(Color.argb(85,0,0,0))}
-  root.addView(shade,FrameLayout.LayoutParams(-1,dp(120),Gravity.TOP))
-  val top=LinearLayout(this).apply{orientation=LinearLayout.VERTICAL;setPadding(dp(20),dp(14),dp(20),0)}
-  val row=LinearLayout(this).apply{gravity=Gravity.CENTER_VERTICAL}
-  fun action(label:String):TextView=TextView(this).apply{text=label;setTextColor(Color.WHITE);textSize=16f;gravity=Gravity.CENTER;setPadding(dp(11),dp(9),dp(11),dp(9))}
-  val brand=action("HDRG  CAMERA").apply{textSize=17f;setTypeface(typeface,1)}
-  row.addView(brand,LinearLayout.LayoutParams(0,dp(48),1f))
-  gridButton=action("▦").apply{contentDescription="Toggle grid";setOnClickListener{gridOverlay.gridVisible=!gridOverlay.gridVisible;setTextColor(if(gridOverlay.gridVisible)Color.rgb(58,222,233) else Color.WHITE)}}
-  row.addView(gridButton)
-  stabilizeButton=action("STAB").apply{contentDescription="Toggle requested video stabilization when supported";setTextColor(Color.rgb(58,222,233));setOnClickListener{if(!active){stabilized=!stabilized;setTextColor(if(stabilized)Color.rgb(58,222,233) else Color.WHITE);closeIdle();openIdle()}}}
-  row.addView(stabilizeButton)
-  qualityButton=action("1080p")
-  row.addView(qualityButton)
-  lensButton=action("↻")
-  row.addView(lensButton)
-  top.addView(row)
-  state=action("● READY").apply{setTextColor(Color.rgb(190,213,234));textSize=12f;gravity=Gravity.LEFT}
-  top.addView(state)
+  // iOS-inspired immersive camera chrome. Keep the existing Camera2 preview and recording pipeline.
+  val shade=View(this).apply{setBackgroundColor(Color.argb(75,0,0,0))}
+  root.addView(shade,FrameLayout.LayoutParams(-1,dp(100),Gravity.TOP))
+  fun action(label:String):TextView=TextView(this).apply{
+   text=label;setTextColor(Color.WHITE);textSize=15f;gravity=Gravity.CENTER
+   setPadding(dp(10),dp(10),dp(10),dp(10));minimumWidth=dp(48);minimumHeight=dp(48)
+  }
+  val top=LinearLayout(this).apply{
+   gravity=Gravity.CENTER_VERTICAL;setPadding(dp(12),dp(12),dp(12),dp(8))
+  }
+  val brand=action("HDRG").apply{textSize=13f;letterSpacing=.2f;setTypeface(typeface,1);gravity=Gravity.CENTER_VERTICAL or Gravity.LEFT}
+  top.addView(brand,LinearLayout.LayoutParams(0,dp(48),1f))
+  gridButton=action("▦").apply{contentDescription="Grid";setOnClickListener{
+   gridOverlay.gridVisible=!gridOverlay.gridVisible
+   setTextColor(if(gridOverlay.gridVisible)Color.rgb(255,207,73) else Color.WHITE)
+  }}
+  top.addView(gridButton)
+  stabilizeButton=action("STAB").apply{contentDescription="Stabilization";textSize=12f;setTextColor(Color.rgb(255,207,73));setOnClickListener{
+   if(!active){stabilized=!stabilized;setTextColor(if(stabilized)Color.rgb(255,207,73) else Color.WHITE);closeIdle();openIdle()}
+  }}
+  top.addView(stabilizeButton)
+  qualityButton=action("HD").apply{contentDescription="Video quality";textSize=13f;setTypeface(typeface,1)}
+  top.addView(qualityButton)
   root.addView(top,FrameLayout.LayoutParams(-1,-2,Gravity.TOP))
-  val footer=LinearLayout(this).apply{orientation=LinearLayout.VERTICAL;setPadding(dp(18),dp(12),dp(18),dp(24));setBackgroundColor(Color.argb(210,3,8,15))}
-  modeButton=action("VIDEO     ·     TIMELAPSE").apply{textSize=14f}
-  footer.addView(modeButton)
-  timer=action("00:00").apply{textSize=15f;setTextColor(Color.rgb(255,105,114));visibility=View.INVISIBLE}
-  footer.addView(timer)
-  val controls=LinearLayout(this).apply{gravity=Gravity.CENTER_VERTICAL or Gravity.CENTER_HORIZONTAL}
-  val gallery=action("▣").apply{textSize=30f;setOnClickListener{openGallery()}}
-  shutter=action("●").apply{textSize=58f;setTextColor(Color.rgb(255,66,87));setOnClickListener{if(active)stop()else start()}}
-  pauseButton=action("Ⅱ").apply{textSize=29f;visibility=View.INVISIBLE;setOnClickListener{pauseOrResume()}}
-  controls.addView(gallery,LinearLayout.LayoutParams(0,dp(75),1f))
-  controls.addView(shutter,LinearLayout.LayoutParams(0,dp(90),1f))
-  controls.addView(pauseButton,LinearLayout.LayoutParams(0,dp(75),1f))
+  state=action("READY").apply{textSize=11f;letterSpacing=.12f;setTextColor(Color.rgb(230,230,230))}
+  val statusParams=FrameLayout.LayoutParams(-2,dp(38),Gravity.TOP or Gravity.CENTER_HORIZONTAL).apply{topMargin=dp(75)}
+  root.addView(state,statusParams)
+  val footer=LinearLayout(this).apply{
+   orientation=LinearLayout.VERTICAL;gravity=Gravity.CENTER_HORIZONTAL
+   setPadding(dp(20),dp(8),dp(20),dp(26))
+   setBackgroundColor(Color.argb(205,0,0,0))
+  }
+  modeButton=action("VIDEO    •    TIMELAPSE").apply{textSize=13f;letterSpacing=.08f}
+  footer.addView(modeButton,LinearLayout.LayoutParams(-1,dp(48)))
+  timer=action("00:00").apply{textSize=15f;setTextColor(Color.rgb(255,77,84));visibility=View.INVISIBLE}
+  footer.addView(timer,LinearLayout.LayoutParams(-1,dp(34)))
+  val controls=LinearLayout(this).apply{gravity=Gravity.CENTER_VERTICAL}
+  val gallery=action("▣").apply{textSize=29f;contentDescription="Gallery";setOnClickListener{openGallery()}}
+  shutter=action("●").apply{
+   textSize=67f;setTextColor(Color.rgb(255,66,77));contentDescription="Record or stop"
+   setOnClickListener{if(active)stop()else start()}
+   background=android.graphics.drawable.GradientDrawable().apply{
+    setColor(Color.argb(155,255,255,255));shape=android.graphics.drawable.GradientDrawable.OVAL
+   }
+  }
+  pauseButton=action("Ⅱ").apply{textSize=28f;visibility=View.INVISIBLE;contentDescription="Pause or resume";setOnClickListener{pauseOrResume()}}
+  controls.addView(gallery,LinearLayout.LayoutParams(0,dp(76),1f))
+  val center=LinearLayout(this).apply{gravity=Gravity.CENTER;addView(shutter,LinearLayout.LayoutParams(dp(76),dp(76)))}
+  controls.addView(center,LinearLayout.LayoutParams(0,dp(88),1f))
+  controls.addView(pauseButton,LinearLayout.LayoutParams(0,dp(76),1f))
   footer.addView(controls)
-  val hint=action("Tap ● to record  •  Background via ongoing notification").apply{textSize=11f;setTextColor(Color.rgb(174,195,213))}
-  footer.addView(hint)
+  lensButton=action("⟳").apply{textSize=25f;contentDescription="Switch front and rear camera"}
+  footer.addView(lensButton,LinearLayout.LayoutParams(dp(56),dp(46)))
   root.addView(footer,FrameLayout.LayoutParams(-1,-2,Gravity.BOTTOM))
   setContentView(root)
   qualityButton.setOnClickListener{
