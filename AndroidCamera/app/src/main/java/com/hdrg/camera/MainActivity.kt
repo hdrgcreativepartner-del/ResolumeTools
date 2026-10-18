@@ -160,8 +160,7 @@ class MainActivity:Activity(){
  }
  private fun TextView.setIcon(name:String){val icon=CameraIcon(name);icon.setBounds(0,0,dp(25),dp(25));setCompoundDrawables(null,icon,null,null)}
  private fun applyProSettings(request:CaptureRequest.Builder){
-  try{request.set(CaptureRequest.CONTROL_AE_EXPOSURE_COMPENSATION,exposureSteps)}catch(_:Exception){}
-  try{request.set(CaptureRequest.CONTROL_AWB_MODE,whiteBalanceMode)}catch(_:Exception){}
+  try{val manager=getSystemService(CAMERA_SERVICE) as CameraManager;val id=manager.cameraIdList.firstOrNull{manager.getCameraCharacteristics(it).get(CameraCharacteristics.LENS_FACING)==lens}?:return;ProCamera.apply(request,manager.getCameraCharacteristics(id),exposureSteps,whiteBalanceMode)}catch(_:Exception){}
  }
  private fun showProControls(){
   if(active||starting){Toast.makeText(this,"Stop recording to adjust preview",Toast.LENGTH_SHORT).show();return}
@@ -189,10 +188,32 @@ class MainActivity:Activity(){
   spinner.setSelection(supported.indexOfFirst{modes[it]==whiteBalanceMode}.coerceAtLeast(0))
   panel.addView(TextView(this).apply{text="White balance";textSize=14f;setTextColor(Color.LTGRAY)})
   panel.addView(spinner)
-  panel.addView(TextView(this).apply{text="ISO, shutter speed and manual focus require device-specific Camera2 controls and are not enabled in this build.";textSize=12f;setTextColor(Color.LTGRAY);setPadding(0,dp(16),0,0)})
+  val manual=characteristics.get(CameraCharacteristics.REQUEST_AVAILABLE_CAPABILITIES)?.contains(CameraCharacteristics.REQUEST_AVAILABLE_CAPABILITIES_MANUAL_SENSOR)==true
+  val isoRange=characteristics.get(CameraCharacteristics.SENSOR_INFO_SENSITIVITY_RANGE)
+  val shutterRange=characteristics.get(CameraCharacteristics.SENSOR_INFO_EXPOSURE_TIME_RANGE)
+  val focusMax=characteristics.get(CameraCharacteristics.LENS_INFO_MINIMUM_FOCUS_DISTANCE)?:0f
+  fun addSelector(title:String, options:List<String>, selected:Int):Spinner{
+   panel.addView(TextView(this).apply{text=title;textSize=14f;setTextColor(Color.LTGRAY);setPadding(0,dp(12),0,0)})
+   val selector=Spinner(this)
+   selector.adapter=ArrayAdapter(this,android.R.layout.simple_spinner_dropdown_item,options)
+   selector.setSelection(selected.coerceIn(0,options.lastIndex))
+   panel.addView(selector)
+   return selector
+  }
+  val isoValues=if(manual&&isoRange!=null)listOf(0,100,200,400,800,1600,3200,6400).filter{it==0||it in isoRange.lower..isoRange.upper} else listOf(0)
+  val shutterValues=if(manual&&shutterRange!=null)listOf(0L,1_000_000_000L/1000,1_000_000_000L/500,1_000_000_000L/250,1_000_000_000L/125,1_000_000_000L/60,1_000_000_000L/30,1_000_000_000L/15).filter{it==0L||it in shutterRange.lower..shutterRange.upper} else listOf(0L)
+  val isoSelector=addSelector("ISO",isoValues.map{if(it==0)"Auto" else it.toString()},isoValues.indexOf(ProCamera.iso).coerceAtLeast(0))
+  val shutterSelector=addSelector("Shutter speed",shutterValues.map{if(it==0L)"Auto" else "1/"+(1_000_000_000L/it)},shutterValues.indexOf(ProCamera.shutterNs).coerceAtLeast(0))
+  val focusValues=if(focusMax>0f)listOf(-1f,0f,focusMax*.1f,focusMax*.25f,focusMax*.5f,focusMax) else listOf(-1f)
+  val focusSelector=addSelector("Focus",focusValues.mapIndexed{i,_->when(i){0->"Auto";1->"Infinity";else->"Manual "+(i-1)}},focusValues.indexOf(ProCamera.focusDiopters).coerceAtLeast(0))
+  if(!manual)panel.addView(TextView(this).apply{text="Manual ISO/shutter is unavailable on this camera.";setTextColor(Color.LTGRAY)})
+  if(focusMax<=0f)panel.addView(TextView(this).apply{text="Manual focus is unavailable on this lens.";setTextColor(Color.LTGRAY)})
   AlertDialog.Builder(this).setTitle("PRO CONTROLS").setView(panel).setNegativeButton("Cancel",null).setPositiveButton("Apply"){_,_->
    exposureSteps=(min+seek.progress).coerceIn(min,upper)
    if(supported.isNotEmpty())whiteBalanceMode=modes[supported[spinner.selectedItemPosition]]
+   ProCamera.iso=isoValues[isoSelector.selectedItemPosition]
+   ProCamera.shutterNs=shutterValues[shutterSelector.selectedItemPosition]
+   ProCamera.focusDiopters=focusValues[focusSelector.selectedItemPosition]
    closeIdle();openIdle()
   }.show()
  }
@@ -235,7 +256,7 @@ class MainActivity:Activity(){
   if(audio&&checkSelfPermission(Manifest.permission.RECORD_AUDIO)!=PackageManager.PERMISSION_GRANTED){ActivityCompat.requestPermissions(this,arrayOf(Manifest.permission.RECORD_AUDIO),1);return}
   starting=true;closeIdle()
   handler.postDelayed({
-   val intent=Intent(this,CaptureService::class.java).apply{action=CaptureService.START;putExtra("lens",lens);putExtra("height",quality);putExtra("interval",interval);putExtra("audio",audio);putExtra("stabilize",stabilized)}
+   val intent=Intent(this,CaptureService::class.java).apply{action=CaptureService.START;putExtra("lens",lens);putExtra("height",quality);putExtra("interval",interval);putExtra("audio",audio);putExtra("stabilize",stabilized);putExtra("iso",ProCamera.iso);putExtra("shutterNs",ProCamera.shutterNs);putExtra("focusDiopters",ProCamera.focusDiopters);putExtra("exposureSteps",exposureSteps);putExtra("whiteBalance",whiteBalanceMode)}
    try{ContextCompat.startForegroundService(this,intent);ui.post{starting=false;state.text="● STARTING";lensButton.alpha=.45f;ui.postDelayed({syncRecordingState()},600)}}
    catch(e:Exception){ui.post{starting=false;state.text="Failed to start";openIdle()}}
   },350)
