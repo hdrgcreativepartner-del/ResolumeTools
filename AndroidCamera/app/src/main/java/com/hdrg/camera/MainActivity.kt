@@ -6,6 +6,8 @@ import android.app.AlertDialog
 import android.content.*
 import android.content.pm.PackageManager
 import android.graphics.Color
+import android.graphics.Typeface
+import android.graphics.drawable.GradientDrawable
 import android.graphics.SurfaceTexture
 import android.hardware.camera2.*
 import android.net.Uri
@@ -64,24 +66,24 @@ class MainActivity:Activity(){
   val shade=View(this).apply{setBackgroundColor(Color.argb(75,0,0,0))}
   root.addView(shade,FrameLayout.LayoutParams(-1,dp(100),Gravity.TOP))
   fun action(label:String):TextView=TextView(this).apply{
-   text=label;setTextColor(Color.WHITE);textSize=15f;gravity=Gravity.CENTER
+   text=label;setTextColor(Color.WHITE);textSize=15f;gravity=Gravity.CENTER;typeface=Typeface.create("sans-serif-medium",Typeface.NORMAL)
    setPadding(dp(10),dp(10),dp(10),dp(10));minimumWidth=dp(48);minimumHeight=dp(48)
   }
   val top=LinearLayout(this).apply{
    gravity=Gravity.CENTER_VERTICAL;setPadding(dp(12),dp(12),dp(12),dp(8))
   }
-  val brand=action("HDRG").apply{textSize=13f;letterSpacing=.2f;setTypeface(typeface,1);gravity=Gravity.CENTER_VERTICAL or Gravity.LEFT}
+  val brand=action("HDRG / CAMERA").apply{textSize=13f;letterSpacing=.2f;setTypeface(typeface,1);gravity=Gravity.CENTER_VERTICAL or Gravity.LEFT}
   top.addView(brand,LinearLayout.LayoutParams(0,dp(48),1f))
   gridButton=action("▦").apply{contentDescription="Grid";setOnClickListener{
    gridOverlay.gridVisible=!gridOverlay.gridVisible
    setTextColor(if(gridOverlay.gridVisible)Color.rgb(255,207,73) else Color.WHITE)
   }}
   top.addView(gridButton)
-  stabilizeButton=action("STAB").apply{contentDescription="Stabilization";textSize=12f;setTextColor(Color.rgb(255,207,73));setOnClickListener{
+  stabilizeButton=action("STB").apply{contentDescription="Stabilization";textSize=12f;setTextColor(Color.rgb(255,207,73));setOnClickListener{
    if(!active){stabilized=!stabilized;setTextColor(if(stabilized)Color.rgb(255,207,73) else Color.WHITE);closeIdle();openIdle()}
   }}
   top.addView(stabilizeButton)
-  qualityButton=action("HD").apply{contentDescription="Video quality";textSize=13f;setTypeface(typeface,1)}
+  qualityButton=action("FHD").apply{contentDescription="Video quality";textSize=13f;setTypeface(typeface,1)}
   top.addView(qualityButton)
   root.addView(top,FrameLayout.LayoutParams(-1,-2,Gravity.TOP))
   state=action("READY").apply{textSize=11f;letterSpacing=.12f;setTextColor(Color.rgb(230,230,230))}
@@ -90,16 +92,16 @@ class MainActivity:Activity(){
   val footer=LinearLayout(this).apply{
    orientation=LinearLayout.VERTICAL;gravity=Gravity.CENTER_HORIZONTAL
    setPadding(dp(20),dp(8),dp(20),dp(26))
-   setBackgroundColor(Color.argb(205,0,0,0))
+   background=GradientDrawable(GradientDrawable.Orientation.BOTTOM_TOP,intArrayOf(Color.argb(245,0,0,0),Color.argb(170,0,0,0),Color.TRANSPARENT))
   }
-  modeButton=action("VIDEO    •    TIMELAPSE").apply{textSize=13f;letterSpacing=.08f}
+  modeButton=action("VIDEO     ·     TIMELAPSE").apply{textSize=13f;letterSpacing=.08f}
   footer.addView(modeButton,LinearLayout.LayoutParams(-1,dp(48)))
   timer=action("00:00").apply{textSize=15f;setTextColor(Color.rgb(255,77,84));visibility=View.INVISIBLE}
   footer.addView(timer,LinearLayout.LayoutParams(-1,dp(34)))
   val controls=LinearLayout(this).apply{gravity=Gravity.CENTER_VERTICAL}
   val gallery=action("▣").apply{textSize=29f;contentDescription="Gallery";setOnClickListener{openGallery()}}
   shutter=action("●").apply{
-   textSize=67f;setTextColor(Color.rgb(255,66,77));contentDescription="Record or stop"
+   textSize=55f;setTextColor(Color.rgb(246,58,69));contentDescription="Record or stop"
    setOnClickListener{if(active)stop()else start()}
    background=android.graphics.drawable.GradientDrawable().apply{
     setColor(Color.argb(155,255,255,255));shape=android.graphics.drawable.GradientDrawable.OVAL
