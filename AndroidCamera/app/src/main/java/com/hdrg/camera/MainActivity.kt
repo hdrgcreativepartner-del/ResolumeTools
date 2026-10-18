@@ -145,6 +145,7 @@ class MainActivity:Activity(){
   if(missing.isNotEmpty())ActivityCompat.requestPermissions(this,missing.toTypedArray(),1)
   ui.post(updater)
  }
+ private fun recordBackground(recording:Boolean)=GradientDrawable().apply{shape=if(recording)GradientDrawable.RECTANGLE else GradientDrawable.OVAL;cornerRadius=dp(18).toFloat();setColor(Color.rgb(245,65,78));setStroke(dp(5),Color.WHITE)}
  private fun dp(n:Int)=(resources.displayMetrics.density*n).toInt()
  private fun command(action:String){startService(Intent(this,CaptureService::class.java).apply{this.action=action})}
  private fun attachSurface(){
@@ -195,10 +196,10 @@ class MainActivity:Activity(){
     active=true;paused=CaptureService.phase=="PAUSED"
     state.text=if(paused)"PAUSED" else "● RECORDING"
     timer.visibility=View.VISIBLE;pauseButton.visibility=View.VISIBLE;lensButton.visibility=View.INVISIBLE
-    pauseButton.text=if(paused)"▶" else "Ⅱ";shutter.text="■"
+    pauseButton.text=if(paused)"▶" else "Ⅱ";shutter.background=recordBackground(true)
    }
    "STARTING"->ui.postDelayed({syncRecordingState()},400)
-   "ERROR"->{active=false;starting=false;shutter.text="●";lensButton.alpha=1f;state.text="Recording failed: "+CaptureService.lastError.take(90);openIdle()}
+   "ERROR"->{active=false;starting=false;shutter.background=recordBackground(false);lensButton.alpha=1f;state.text="Recording failed: "+CaptureService.lastError.take(90);openIdle()}
    else->{if(!active)ui.postDelayed({if(CaptureService.phase=="STARTING")syncRecordingState()},350)}
   }
  }
