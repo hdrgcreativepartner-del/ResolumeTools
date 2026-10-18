@@ -169,11 +169,11 @@ class MainActivity:Activity(){
   val id=manager.cameraIdList.firstOrNull{manager.getCameraCharacteristics(it).get(CameraCharacteristics.LENS_FACING)==lens}?:return
   val characteristics=manager.getCameraCharacteristics(id)
   val range=characteristics.get(CameraCharacteristics.CONTROL_AE_COMPENSATION_RANGE)
-  val min=range?.lower?:0;val max=range?.upper?:0
+  val min=range?.lower?:0;val upper=range?.upper?:0
   val panel=LinearLayout(this).apply{orientation=LinearLayout.VERTICAL;setPadding(dp(22),dp(12),dp(22),dp(12))}
   val label=TextView(this).apply{text="Exposure compensation: $exposureSteps";textSize=16f;setTextColor(Color.WHITE)}
   panel.addView(label)
-  val seek=SeekBar(this).apply{this.max=(max-min).coerceAtLeast(0);progress=(exposureSteps-min).coerceIn(0,this.max);isEnabled=max>min}
+  val seek=SeekBar(this).apply{this.max=(upper-min).coerceAtLeast(0);progress=(exposureSteps-min).coerceIn(0,this.max);isEnabled=upper>min}
   panel.addView(seek)
   seek.setOnSeekBarChangeListener(object:SeekBar.OnSeekBarChangeListener{
    override fun onProgressChanged(bar:SeekBar?,progress:Int,fromUser:Boolean){label.text="Exposure compensation: ${min+progress}"}
@@ -191,7 +191,7 @@ class MainActivity:Activity(){
   panel.addView(spinner)
   panel.addView(TextView(this).apply{text="ISO, shutter speed and manual focus require device-specific Camera2 controls and are not enabled in this build.";textSize=12f;setTextColor(Color.LTGRAY);setPadding(0,dp(16),0,0)})
   AlertDialog.Builder(this).setTitle("PRO CONTROLS").setView(panel).setNegativeButton("Cancel",null).setPositiveButton("Apply"){_,_->
-   exposureSteps=(min+seek.progress).coerceIn(min,max)
+   exposureSteps=(min+seek.progress).coerceIn(min,upper)
    if(supported.isNotEmpty())whiteBalanceMode=modes[supported[spinner.selectedItemPosition]]
    closeIdle();openIdle()
   }.show()
