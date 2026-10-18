@@ -73,25 +73,25 @@ class MainActivity:Activity(){
   root.addView(shade,FrameLayout.LayoutParams(-1,dp(100),Gravity.TOP))
   fun action(label:String):TextView=TextView(this).apply{
    text=label;setTextColor(Color.WHITE);textSize=15f;gravity=Gravity.CENTER;typeface=Typeface.create("sans-serif-medium",Typeface.NORMAL)
-   setPadding(dp(10),dp(10),dp(10),dp(10));minimumWidth=dp(48);minimumHeight=dp(48)
+   setPadding(dp(10),dp(10),dp(10),dp(10));minimumWidth=dp(40);minimumHeight=dp(48)
   }
   val top=LinearLayout(this).apply{
-   gravity=Gravity.CENTER_VERTICAL;setPadding(dp(12),dp(12),dp(12),dp(8))
+   gravity=Gravity.CENTER_VERTICAL;setPadding(dp(8),dp(12),dp(8),dp(8))
   }
-  val brand=action("HDRG / CAMERA").apply{textSize=13f;letterSpacing=.2f;setTypeface(typeface,1);gravity=Gravity.CENTER_VERTICAL or Gravity.LEFT}
+  val brand=action("HDRG").apply{textSize=13f;letterSpacing=.12f;setTypeface(typeface,1);gravity=Gravity.CENTER_VERTICAL or Gravity.LEFT}
   top.addView(brand,LinearLayout.LayoutParams(0,dp(48),1f))
-  gridButton=action("").apply{contentDescription="Grid";setOnClickListener{
+  gridButton=action("").apply{setPadding(dp(4),0,dp(4),0);contentDescription="Grid";setOnClickListener{
    gridOverlay.gridVisible=!gridOverlay.gridVisible
    setTextColor(if(gridOverlay.gridVisible)Color.rgb(255,207,73) else Color.WHITE)
   }}
   gridButton.setIcon("grid");top.addView(gridButton)
-  stabilizeButton=action("").apply{contentDescription="Stabilization";textSize=12f;setTextColor(Color.rgb(255,207,73));setOnClickListener{
+  stabilizeButton=action("").apply{setPadding(dp(4),0,dp(4),0);contentDescription="Stabilization";textSize=12f;setTextColor(Color.rgb(255,207,73));setOnClickListener{
    if(!active){stabilized=!stabilized;setTextColor(if(stabilized)Color.rgb(255,207,73) else Color.WHITE);closeIdle();openIdle()}
   }}
   stabilizeButton.setIcon("stabilize");top.addView(stabilizeButton)
   qualityButton=action("FHD").apply{contentDescription="Video quality";textSize=13f;setTypeface(typeface,1)}
   top.addView(qualityButton)
-  val proButton=action("PRO").apply{textSize=12f;contentDescription="Professional controls";setOnClickListener{showProControls()}}
+  val proButton=action("PRO").apply{setPadding(dp(4),0,dp(4),0);textSize=11f;contentDescription="Professional controls";setOnClickListener{showProControls()}}
   top.addView(proButton)
   root.addView(top,FrameLayout.LayoutParams(-1,-2,Gravity.TOP))
   state=action("READY").apply{textSize=11f;letterSpacing=.12f;setTextColor(Color.rgb(230,230,230))}
@@ -258,7 +258,7 @@ class MainActivity:Activity(){
   command(CaptureService.STOP);active=false;paused=false;timer.visibility=View.INVISIBLE;pauseButton.visibility=View.INVISIBLE;lensButton.visibility=View.VISIBLE;pauseButton.setIcon("pause");shutter.background=recordBackground(false);state.text="Saving to Gallery…";lensButton.alpha=1f
   ui.postDelayed({if(!CaptureService.running){state.text=if(CaptureService.phase=="ERROR")"Recording failed" else "READY";openIdle()}},1800)
  }
- private fun pauseOrResume(){if(!active)return;command(if(paused)CaptureService.RESUME else CaptureService.PAUSE);paused=!paused;pauseButton.text=if(paused)"▶" else "Ⅱ";state.text=if(paused)"PAUSED" else "● RECORDING"}
+ private fun pauseOrResume(){if(!active)return;command(if(paused)CaptureService.RESUME else CaptureService.PAUSE);paused=!paused;pauseButton.setIcon(if(paused)"play" else "pause");state.text=if(paused)"PAUSED" else "● RECORDING"}
  private fun openGallery(){startActivity(Intent(this,GalleryActivity::class.java))}
  override fun onRequestPermissionsResult(requestCode:Int,permissions:Array<out String>,results:IntArray){super.onRequestPermissionsResult(requestCode,permissions,results);if(preview.isAvailable)openIdle()}
  override fun onResume(){super.onResume();if(preview.isAvailable)attachSurface();active=CaptureService.running||CaptureService.phase=="STARTING";if(active){shutter.background=recordBackground(true);timer.visibility=View.VISIBLE;pauseButton.visibility=View.VISIBLE;lensButton.visibility=View.INVISIBLE;state.text=if(CaptureService.phase=="PAUSED")"PAUSED" else if(CaptureService.phase=="STARTING")"● STARTING" else "● RECORDING"}}
