@@ -201,7 +201,7 @@ class MainActivity:Activity(){
  }
  private fun refreshThumbnail(){if(mediaWorker.isShutdown)return;mediaWorker.execute{
   val latest=MediaCatalog.list(this).firstOrNull();val bitmap=latest?.let{MediaCatalog.thumbnail(this,it.second,dp(48))}
-  ui.post{if(!isDestroyed&&bitmap!=null){val drawable=android.graphics.drawable.BitmapDrawable(resources,bitmap);drawable.setBounds(0,0,dp(44),dp(44));galleryButton.setCompoundDrawables(null,drawable,null,null)}}
+  ui.post{if(!isDestroyed&&bitmap!=null){val drawable=android.graphics.drawable.BitmapDrawable(resources,bitmap);val layer=android.graphics.drawable.LayerDrawable(arrayOf(drawable)).apply{setLayerSize(0,dp(44),dp(44));setLayerGravity(0,Gravity.CENTER)};galleryButton.setCompoundDrawables(null,null,null,null);galleryButton.background=RippleDrawable(ColorStateList.valueOf(0x33ffffff),layer,null)}}
  }}
  private fun TextView.setIcon(name:String,selected:Boolean=false){
   text="";setCompoundDrawables(null,null,null,null)
@@ -217,7 +217,7 @@ class MainActivity:Activity(){
   shutter.isEnabled=fresh;shutter.alpha=if(fresh)1f else .35f
   val message=when{
    fresh->""
-   !preview.isHardwareAccelerated->"Rend er kamera tidak aktif · ketuk ulang".replace("Rend er","Render")
+   !preview.isHardwareAccelerated->"Render kamera tidak aktif · ketuk ulang"
    checkSelfPermission(Manifest.permission.CAMERA)!=PackageManager.PERMISSION_GRANTED->"Izinkan akses kamera · ketuk di sini"
    previewProblem.isNotEmpty()->previewProblem+" · ketuk ulang"
    previewStartedAt>0&&now-previewStartedAt>7000->"Belum menerima gambar · ketuk ulang"

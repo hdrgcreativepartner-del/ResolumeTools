@@ -20,6 +20,6 @@ PY
 "$BUILD_TOOLS/aapt2" compile --dir app/src/main/res -o build/manual/resources.zip
 "$BUILD_TOOLS/aapt2" link -o build/manual/unsigned.apk -I "$PLATFORM_JAR" --manifest build/manual/AndroidManifest.xml --java build/manual/gen --custom-package com.hdrg.camera build/manual/resources.zip
 "$KOTLIN_HOME/bin/kotlinc" app/src/main/java/com/hdrg/camera/*.kt -classpath "$PLATFORM_JAR" -jvm-target 17 -d build/manual/classes.jar
-"$BUILD_TOOLS/d8" --lib "$PLATFORM_JAR" --min-api 26 --output build/manual/dex build/manual/classes.jar "$KOTLIN_HOME/lib/kotlin-stdlib.jar" "$KOTLIN_HOME/lib/annotations-13.0.jar"
+java -cp "$BUILD_TOOLS/lib/d8.jar" com.android.tools.r8.R8 --release --pg-conf app/proguard-rules.pro --lib "$PLATFORM_JAR" --min-api 26 --output build/manual/dex build/manual/classes.jar "$KOTLIN_HOME/lib/kotlin-stdlib.jar" "$KOTLIN_HOME/lib/annotations-13.0.jar"
 (cd build/manual/dex && zip -q ../unsigned.apk classes*.dex)
 "$BUILD_TOOLS/zipalign" -f 4 build/manual/unsigned.apk build/manual/HDRG-Cam-v0.6.3-unsigned.apk
