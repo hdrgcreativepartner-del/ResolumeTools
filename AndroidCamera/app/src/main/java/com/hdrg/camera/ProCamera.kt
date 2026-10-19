@@ -26,7 +26,11 @@ object ProCamera {
   if(focusDiopters>=0f && minFocus>0f){
    request.set(CaptureRequest.CONTROL_AF_MODE,CaptureRequest.CONTROL_AF_MODE_OFF)
    request.set(CaptureRequest.LENS_FOCUS_DISTANCE,focusDiopters.coerceIn(0f,minFocus))
-  }else request.set(CaptureRequest.CONTROL_AF_MODE,CaptureRequest.CONTROL_AF_MODE_CONTINUOUS_VIDEO)
+  }else {
+   val supported=characteristics.get(CameraCharacteristics.CONTROL_AF_AVAILABLE_MODES)?:intArrayOf(0)
+   val mode=intArrayOf(CaptureRequest.CONTROL_AF_MODE_CONTINUOUS_VIDEO,CaptureRequest.CONTROL_AF_MODE_CONTINUOUS_PICTURE,CaptureRequest.CONTROL_AF_MODE_AUTO,CaptureRequest.CONTROL_AF_MODE_OFF).firstOrNull{supported.contains(it)}?:0
+   request.set(CaptureRequest.CONTROL_AF_MODE,mode)
+  }
   val modes=characteristics.get(CameraCharacteristics.CONTROL_AWB_AVAILABLE_MODES)
   if(modes?.contains(whiteBalance)==true)request.set(CaptureRequest.CONTROL_AWB_MODE,whiteBalance)
  }
