@@ -36,7 +36,12 @@ class MainActivity:Activity(){
  private lateinit var gridButton:TextView
  private lateinit var stabilizeButton:TextView
  private lateinit var gridOverlay:GridOverlay
- private var stabilized=true
+ private var stabilized=false
+ private var lastPreviewFrame=0L
+ private var previewStartedAt=0L
+ private var previewProblem=""
+ private var previewRecoveryAttempted=false
+ private var previewFrames=0L
  @Volatile private var previewSurface:Surface?=null
  private var idleCamera:CameraDevice?=null
  private var idleSession:CameraCaptureSession?=null
@@ -68,17 +73,26 @@ class MainActivity:Activity(){
  private val updater=object:Runnable{override fun run(){
   if(!resumed)return
   syncRecordingState()
+  updatePreviewHealth()
   if(active){val seconds=CaptureService.elapsedMillis()/1000;timer.text="%02d:%02d".format(seconds/60,seconds%60)}
   ui.postDelayed(this,500)
  }}
  override fun onCreate(savedInstanceState:Bundle?){
   super.onCreate(savedInstanceState)
-  window.statusBarColor=Color.BLACK;window.navigationBarColor=Color.BLACK
+  window.setFlags(WindowManager.LayoutParams.FLAG_HARDWARE_ACCELERATED,WindowManager.LayoutParams.FLAG_HARDWARE_ACCELERATED)
+  window.statusBarColor=Color.TRANSPARENT;window.navigationBarColor=Color.TRANSPARENT
+  if(Build.VERSION.SDK_INT>=30)window.setDecorFitsSystemWindows(false)
+  else window.decorView.systemUiVisibility=View.SYSTEM_UI_FLAG_LAYOUT_STABLE or View.SYSTEM_UI_FLAG_LAYOUT_FULLSCREEN or View.SYSTEM_UI_FLAG_LAYOUT_HIDE_NAVIGATION
+  if(Build.VERSION.SDK_INT>=29)window.isNavigationBarContrastEnforced=false
   window.addFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON)
   val prefs=getPreferences(MODE_PRIVATE)
-  quality=prefs.getInt("quality",1080);interval=prefs.getInt("interval",0);audio=prefs.getBoolean("audio",true);stabilized=prefs.getBoolean("stabilized",true)
-  val root=FrameLayout(this).apply{setBackgroundColor(Color.BLACK)}
-  root.setOnApplyWindowInsetsListener{v,insets->v.setPadding(insets.systemWindowInsetLeft,insets.systemWindowInsetTop,insets.systemWindowInsetRight,insets.systemWindowInsetBottom);insets}
+  quality=prefs.getInt("quality",1080);interval=prefs.getInt("interval",0);audio=prefs.getBoolean("audio",true);stabilized=prefs.getBoolean("stabilized",false)
+  val root=FrameLayout(this).apply{setBackgroundColor(0xff0b0d11.toInt())}
+  root.setOnApplyWindowInsetsListener{v,insets->
+   if(Build.VERSION.SDK_INT>=30){val bars=insets.getInsets(WindowInsets.Type.systemBars() or WindowInsets.Type.displayCutout());v.setPadding(bars.left,bars.top,bars.right,bars.bottom)}
+   else v.setPadding(insets.systemWindowInsetLeft,insets.systemWindowInsetTop,insets.systemWindowInsetRight,insets.systemWindowInsetBottom)
+   insets
+  }
   fun action(label:String,description:String=label):TextView=TextView(this).apply{
    text=label;contentDescription=description;setTextColor(Color.WHITE);textSize=13f;gravity=Gravity.CENTER
    typeface=Typeface.create("sans-serif-medium",Typeface.NORMAL);minimumWidth=dp(48);minimumHeight=dp(48)
@@ -86,28 +100,31 @@ class MainActivity:Activity(){
    isFocusable=true
   }
   val top=LinearLayout(this).apply{gravity=Gravity.CENTER_VERTICAL;setPadding(dp(8),0,dp(8),0)}
-  top.addView(action("HDRG").apply{letterSpacing=.12f;textSize=12f;setOnClickListener{showAbout()}},LinearLayout.LayoutParams(0,dp(56),1f))
+  top.addView(action("HDRG CAM").apply{letterSpacing=.1f;textSize=13f;setOnClickListener{showAbout()}},LinearLayout.LayoutParams(0,dp(56),1f))
   gridOverlay=GridOverlay(this).apply{gridVisible=prefs.getBoolean("grid",false)}
   gridButton=action("","Garis komposisi").apply{setOnClickListener{gridOverlay.gridVisible=!gridOverlay.gridVisible;setIcon("grid",gridOverlay.gridVisible)}}
-  gridButton.setIcon("grid",gridOverlay.gridVisible);top.addView(gridButton,LinearLayout.LayoutParams(dp(48),dp(48)))
+  gridButton.setIcon("grid",gridOverlay.gridVisible);
   stabilizeButton=action("","Stabilisasi").apply{setOnClickListener{if(canAdjust()){stabilized=!stabilized;setIcon("stabilize",stabilized);updateIdleRequest()}}}
-  stabilizeButton.setIcon("stabilize",stabilized);top.addView(stabilizeButton,LinearLayout.LayoutParams(dp(48),dp(48)))
+  stabilizeButton.setIcon("stabilize",stabilized);
   qualityButton=action("${quality}p","Resolusi video").apply{setOnClickListener{if(canAdjust())chooseQuality()}}
-  top.addView(qualityButton,LinearLayout.LayoutParams(dp(64),dp(48)))
+  top.addView(qualityButton,LinearLayout.LayoutParams(dp(80),dp(48)))
   top.addView(action("PRO","Kontrol kamera manual").apply{setOnClickListener{showProControls()}},LinearLayout.LayoutParams(dp(48),dp(48)))
-  top.background=GradientDrawable(GradientDrawable.Orientation.TOP_BOTTOM,intArrayOf(0xcc000000.toInt(),0x00000000))
-  viewfinder=FrameLayout(this).apply{setBackgroundColor(Color.rgb(8,8,8))}
+  top.setBackgroundColor(0xff0b0d11.toInt())
+  viewfinder=FrameLayout(this).apply{setBackgroundColor(Color.BLACK);clipChildren=true}
   preview=TextureView(this)
   viewfinder.addView(preview,FrameLayout.LayoutParams(-1,-1,Gravity.CENTER))
   viewfinder.addView(gridOverlay,FrameLayout.LayoutParams(-1,-1,Gravity.CENTER))
-  state=action("Membuka kamera").apply{textSize=12f;isClickable=false;background=null;setShadowLayer(3f,0f,1f,Color.BLACK)}
-  viewfinder.addView(state,FrameLayout.LayoutParams(-2,dp(40),Gravity.TOP or Gravity.CENTER_HORIZONTAL).apply{topMargin=dp(56)})
+  state=action("Menghubungkan kamera…").apply{textSize=12f;setPadding(dp(12),0,dp(12),0);background=GradientDrawable().apply{setColor(0x99000000.toInt());cornerRadius=dp(16).toFloat()};setOnClickListener{if(canAdjust())retryPreview()};setOnLongClickListener{showDiagnostics();true}}
+  viewfinder.addView(state,FrameLayout.LayoutParams(-2,dp(32),Gravity.BOTTOM or Gravity.CENTER_HORIZONTAL).apply{bottomMargin=dp(12)})
   timer=action("00:00").apply{typeface=Typeface.MONOSPACE;setTextColor(Color.rgb(255,91,99));visibility=View.GONE;background=null}
-  viewfinder.addView(timer,FrameLayout.LayoutParams(-2,dp(40),Gravity.TOP or Gravity.CENTER_HORIZONTAL).apply{topMargin=dp(88)})
-  root.addView(viewfinder,FrameLayout.LayoutParams(-1,-1))
+  viewfinder.addView(timer,FrameLayout.LayoutParams(-2,dp(40),Gravity.TOP or Gravity.CENTER_HORIZONTAL).apply{topMargin=dp(12)})
+  val viewTools=LinearLayout(this).apply{gravity=Gravity.CENTER_VERTICAL;background=GradientDrawable().apply{setColor(0x99000000.toInt());cornerRadius=dp(24).toFloat()}}
+  viewTools.addView(gridButton,LinearLayout.LayoutParams(dp(48),dp(48)));viewTools.addView(stabilizeButton,LinearLayout.LayoutParams(dp(48),dp(48)))
+  viewfinder.addView(viewTools,FrameLayout.LayoutParams(dp(96),dp(48),Gravity.TOP or Gravity.END).apply{topMargin=dp(12);rightMargin=dp(12)})
+  root.addView(viewfinder,FrameLayout.LayoutParams(-1,-1).apply{topMargin=dp(56);bottomMargin=dp(176)})
   root.addView(top,FrameLayout.LayoutParams(-1,dp(56),Gravity.TOP))
   viewfinder.addOnLayoutChangeListener{_,_,_,_,_,_,_,_,_->fitPreview()}
-  val footer=LinearLayout(this).apply{orientation=LinearLayout.VERTICAL;setPadding(0,dp(12),0,dp(8));background=GradientDrawable(GradientDrawable.Orientation.BOTTOM_TOP,intArrayOf(0xf5000000.toInt(),0xc0000000.toInt(),0x00000000))}
+  val footer=LinearLayout(this).apply{orientation=LinearLayout.VERTICAL;setPadding(dp(12),dp(4),dp(12),dp(4));setBackgroundColor(0xff0b0d11.toInt())}
   val modes=LinearLayout(this).apply{gravity=Gravity.CENTER}
   videoMode=action("VIDEO").apply{letterSpacing=.08f;setOnClickListener{if(canAdjust()){interval=0;updateModes()}}}
   lapseMode=action("TIMELAPSE").apply{letterSpacing=.08f;setOnClickListener{if(canAdjust()){if(interval==0)interval=2;updateModes()}}}
@@ -128,14 +145,15 @@ class MainActivity:Activity(){
   val options=LinearLayout(this).apply{gravity=Gravity.CENTER}
   audioButton=action("").apply{textSize=11f;setOnClickListener{if(canAdjust()&&interval==0){audio=!audio;updateModes()}}}
   modeButton=action("").apply{textSize=11f;setOnClickListener{if(canAdjust()&&interval>0)chooseInterval()}}
-  options.addView(audioButton,LinearLayout.LayoutParams(0,dp(48),1f));options.addView(modeButton,LinearLayout.LayoutParams(0,dp(48),1f));options.addView(action("BACKGROUND","Lanjutkan merekam di background").apply{textSize=10f;setOnClickListener{if(active)moveTaskToBack(true)else Toast.makeText(this@MainActivity,"Mulai rekaman terlebih dahulu",Toast.LENGTH_SHORT).show()}},LinearLayout.LayoutParams(0,dp(48),1f));footer.addView(options)
+  options.addView(audioButton,LinearLayout.LayoutParams(0,dp(48),1f));options.addView(modeButton,LinearLayout.LayoutParams(0,dp(48),1f));options.addView(action("Latar belakang","Lanjutkan merekam di background").apply{textSize=10f;setOnClickListener{if(active)moveTaskToBack(true)else Toast.makeText(this@MainActivity,"Mulai rekaman terlebih dahulu",Toast.LENGTH_SHORT).show()}},LinearLayout.LayoutParams(0,dp(48),1f));footer.addView(options)
   root.addView(footer,FrameLayout.LayoutParams(-1,-2,Gravity.BOTTOM))
   root.addOnLayoutChangeListener{_,_,_,_,_,_,_,_,_->
    val landscape=root.width>root.height
-   val rail=if(landscape)dp(248) else 0
+   val rail=if(landscape)dp(260) else 0
    val stageParams=viewfinder.layoutParams as FrameLayout.LayoutParams
-   if(stageParams.rightMargin!=rail){stageParams.rightMargin=rail;viewfinder.layoutParams=stageParams}
-   val footerWidth=if(landscape)dp(248) else -1
+   val bottom=if(landscape)0 else footer.measuredHeight
+   if(stageParams.rightMargin!=rail||stageParams.bottomMargin!=bottom){stageParams.rightMargin=rail;stageParams.bottomMargin=bottom;viewfinder.layoutParams=stageParams}
+   val footerWidth=if(landscape)dp(260) else -1
    val footerGravity=if(landscape)Gravity.END or Gravity.CENTER_VERTICAL else Gravity.BOTTOM
    val fp=footer.layoutParams as FrameLayout.LayoutParams
    if(fp.width!=footerWidth||fp.gravity!=footerGravity){fp.width=footerWidth;fp.gravity=footerGravity;footer.layoutParams=fp}
@@ -148,7 +166,7 @@ class MainActivity:Activity(){
    override fun onSurfaceTextureAvailable(t:SurfaceTexture,w:Int,h:Int){attachSurface()}
    override fun onSurfaceTextureSizeChanged(t:SurfaceTexture,w:Int,h:Int){fitPreview()}
    override fun onSurfaceTextureDestroyed(t:SurfaceTexture):Boolean{detachSurface();return true}
-   override fun onSurfaceTextureUpdated(t:SurfaceTexture){}
+   override fun onSurfaceTextureUpdated(t:SurfaceTexture){lastPreviewFrame=SystemClock.elapsedRealtime();previewFrames++;if(!active&&!starting)updatePreviewHealth()}
   }
   val permissions=mutableListOf(Manifest.permission.CAMERA)
   if(Build.VERSION.SDK_INT>=33)permissions.add(Manifest.permission.POST_NOTIFICATIONS)
@@ -160,14 +178,14 @@ class MainActivity:Activity(){
   val accent=Color.rgb(113,174,255)
   videoMode.setTextColor(if(interval==0)accent else Color.LTGRAY);videoMode.isSelected=interval==0
   lapseMode.setTextColor(if(interval>0)accent else Color.LTGRAY);lapseMode.isSelected=interval>0
-  audioButton.text=if(interval>0)"TANPA AUDIO" else if(audio)"MIKROFON ON" else "MIKROFON OFF"
+  audioButton.text=if(interval>0)"Tanpa audio" else if(audio)"Audio aktif" else "Tanpa audio"
   shutter.background=ShutterDrawable(active,interval>0)
-  audioButton.alpha=if(interval>0).4f else 1f;modeButton.text=if(interval>0)"INTERVAL ${interval}s" else "30 FPS"
+  audioButton.alpha=if(interval>0).4f else 1f;modeButton.text=if(interval>0)"Interval ${interval}s" else "30 FPS"
  }
- private fun showAbout(){AlertDialog.Builder(this).setTitle("HDRG Cam 0.6.2").setMessage("Build uji UI/UX. Preview Camera2, video dan timelapse. Kontrol manual serta stabilisasi mengikuti kemampuan perangkat.").setPositiveButton("Tutup",null).show()}
+ private fun showAbout(){showDiagnostics()}
  private fun bottomChoices(title:String,items:Array<String>,selected:Int,onSelect:(Int)->Unit){
   val dialog=AlertDialog.Builder(this).setTitle(title).setSingleChoiceItems(items,selected){d,i->onSelect(i);d.dismiss()}.setNegativeButton("Tutup",null).create()
-  dialog.show();dialog.window?.apply{setGravity(Gravity.BOTTOM);setLayout(-1,-2)}
+  dialog.show();styleSheet(dialog);dialog.window?.apply{setGravity(Gravity.BOTTOM);setLayout(-1,-2)}
  }
  private fun chooseQuality(){bottomChoices("Resolusi video",arrayOf("HD · 720p","Full HD · 1080p","4K · jika didukung"),when(quality){720->0;2160->2;else->1}){quality=intArrayOf(720,1080,2160)[it];qualityButton.text="${quality}p"}}
  private fun chooseInterval(){val values=intArrayOf(1,2,5,10,30);bottomChoices("Interval timelapse",values.map{"Setiap $it detik"}.toTypedArray(),values.indexOf(interval)){interval=values[it];updateModes()}}
@@ -185,7 +203,44 @@ class MainActivity:Activity(){
   val latest=MediaCatalog.list(this).firstOrNull();val bitmap=latest?.let{MediaCatalog.thumbnail(this,it.second,dp(48))}
   ui.post{if(!isDestroyed&&bitmap!=null){val drawable=android.graphics.drawable.BitmapDrawable(resources,bitmap);drawable.setBounds(0,0,dp(44),dp(44));galleryButton.setCompoundDrawables(null,drawable,null,null)}}
  }}
- private fun TextView.setIcon(name:String,selected:Boolean=false){val icon=CameraIcon(name,if(selected)Color.rgb(113,174,255) else Color.WHITE);icon.setBounds(0,0,dp(25),dp(25));setCompoundDrawables(null,icon,null,null)}
+ private fun TextView.setIcon(name:String,selected:Boolean=false){
+  text="";setCompoundDrawables(null,null,null,null)
+  val layer=android.graphics.drawable.LayerDrawable(arrayOf(CameraIcon(name,if(selected)0xff80b6ff.toInt() else Color.WHITE)))
+  layer.setLayerSize(0,dp(23),dp(23));layer.setLayerGravity(0,Gravity.CENTER)
+  background=RippleDrawable(ColorStateList.valueOf(0x3371aeff),layer,GradientDrawable().apply{setColor(Color.WHITE);cornerRadius=dp(24).toFloat()})
+ }
+ private fun styleSheet(dialog:AlertDialog){dialog.window?.setBackgroundDrawable(GradientDrawable().apply{setColor(0xff171c25.toInt());cornerRadii=floatArrayOf(dp(24).toFloat(),dp(24).toFloat(),dp(24).toFloat(),dp(24).toFloat(),0f,0f,0f,0f)})}
+ private fun updatePreviewHealth(){
+  if(!resumed||active||starting||CaptureService.phase=="SAVING")return
+  val now=SystemClock.elapsedRealtime()
+  val fresh=lastPreviewFrame>0&&now-lastPreviewFrame<2500
+  shutter.isEnabled=fresh;shutter.alpha=if(fresh)1f else .35f
+  val message=when{
+   fresh->""
+   !preview.isHardwareAccelerated->"Rend er kamera tidak aktif · ketuk ulang".replace("Rend er","Render")
+   checkSelfPermission(Manifest.permission.CAMERA)!=PackageManager.PERMISSION_GRANTED->"Izinkan akses kamera · ketuk di sini"
+   previewProblem.isNotEmpty()->previewProblem+" · ketuk ulang"
+   previewStartedAt>0&&now-previewStartedAt>7000->"Belum menerima gambar · ketuk ulang"
+   else->"Menghubungkan kamera…"
+  }
+  state.visibility=if(fresh)View.GONE else View.VISIBLE
+  if(state.text.toString()!=message)state.text=message
+  if(!fresh&&previewStartedAt>0&&now-previewStartedAt>7000&&!previewRecoveryAttempted){
+   previewRecoveryAttempted=true;stabilized=false;ProCamera.iso=0;ProCamera.shutterNs=0;ProCamera.focusDiopters=-1f
+   stabilizeButton.setIcon("stabilize",false);retryPreview(false)
+  }
+ }
+ private fun retryPreview(resetRecovery:Boolean=true){
+  if(!canAdjust())return
+  if(checkSelfPermission(Manifest.permission.CAMERA)!=PackageManager.PERMISSION_GRANTED){requestPermissions(arrayOf(Manifest.permission.CAMERA),1);return}
+  if(resetRecovery)previewRecoveryAttempted=false
+  lastPreviewFrame=0;previewStartedAt=SystemClock.elapsedRealtime();previewProblem=""
+  closeIdle{ui.post{if(previewSurface==null)attachSurface()else openIdle()}}
+ }
+ private fun showDiagnostics(){
+  val text="HDRG Cam 0.6.3 RC4\n${Build.MANUFACTURER} ${Build.MODEL} · Android ${Build.VERSION.RELEASE}\nGPU: ${preview.isHardwareAccelerated} · Surface: ${preview.isAvailable}\nFrame: $previewFrames · ${if(lastPreviewFrame==0L)"belum ada" else "${SystemClock.elapsedRealtime()-lastPreviewFrame} ms lalu"}\nStatus: ${CaptureService.phase}\n${previewProblem.ifBlank{CaptureService.lastError}}"
+  AlertDialog.Builder(this).setTitle("Diagnostik kamera").setMessage(text).setPositiveButton("Salin"){_,_->(getSystemService(CLIPBOARD_SERVICE) as android.content.ClipboardManager).setPrimaryClip(ClipData.newPlainText("HDRG Cam",text))}.setNegativeButton("Tutup",null).show()
+ }
  private fun showProControls(){
   if(!canAdjust()){Toast.makeText(this,"Stop recording to adjust preview",Toast.LENGTH_SHORT).show();return}
   val manager=getSystemService(CAMERA_SERVICE) as CameraManager
@@ -242,13 +297,14 @@ class MainActivity:Activity(){
    ProCamera.focusDiopters=focusValues[focusSelector.selectedItemPosition]
    updateIdleRequest()
   }.create()
-  dialog.show();dialog.window?.apply{setGravity(Gravity.BOTTOM);setLayout(-1,(resources.displayMetrics.heightPixels*.78f).toInt())}
+  dialog.show();styleSheet(dialog);dialog.window?.apply{setGravity(Gravity.BOTTOM);setLayout(-1,(resources.displayMetrics.heightPixels*.78f).toInt())}
  }
  private fun dp(n:Int)=(resources.displayMetrics.density*n).toInt()
  private fun command(action:String){startService(Intent(this,CaptureService::class.java).apply{this.action=action})}
  private fun attachSurface(){
   if(!preview.isAvailable||!resumed||previewSurface!=null)return
   previewSurface=Surface(preview.surfaceTexture!!);CameraPreviewBridge.surface=previewSurface
+  lastPreviewFrame=0;previewStartedAt=SystemClock.elapsedRealtime();previewProblem=""
   if(CaptureService.running||CaptureService.phase=="STARTING")command(CaptureService.ATTACH)else openIdle()
  }
  private fun detachSurface(){
@@ -266,7 +322,7 @@ class MainActivity:Activity(){
     set(CaptureRequest.CONTROL_VIDEO_STABILIZATION_MODE,if(stabilized&&available.contains(1))1 else 0)
    }
    idleSession?.setRepeatingRequest(request.build(),null,handler)
-  }catch(e:Exception){ui.post{state.text="Preview: ${e.message?.take(60)}"}}
+  }catch(e:Exception){ui.post{previewProblem="Preview: ${e.message?.take(60)}";updatePreviewHealth()}}
  }}
  private fun openIdle(){handler.post{
   if(!resumed||previewSurface==null||CaptureService.running||starting||idleOpening||idleClosing||CaptureService.phase in listOf("STARTING","SAVING")||idleCamera!=null)return@post
@@ -287,15 +343,15 @@ class MainActivity:Activity(){
      if(token!=generation||!resumed||starting){c.close();return}
      idleCamera=c;val target=previewSurface?:run{c.close();return}
      @Suppress("DEPRECATION") c.createCaptureSession(listOf(target),object:CameraCaptureSession.StateCallback(){
-      override fun onConfigured(s:CameraCaptureSession){if(token!=generation||idleCamera!==c){s.close();return};idleSession=s;updateIdleRequest();ui.post{state.text="Siap"}}
-      override fun onConfigureFailed(s:CameraCaptureSession){closeIdle();ui.post{state.text="Preview gagal. Buka ulang kamera."}}
+      override fun onConfigured(s:CameraCaptureSession){if(token!=generation||idleCamera!==c){s.close();return};idleSession=s;updateIdleRequest();ui.post{previewStartedAt=SystemClock.elapsedRealtime();updatePreviewHealth()}}
+      override fun onConfigureFailed(s:CameraCaptureSession){closeIdle();ui.post{previewProblem="Konfigurasi preview gagal";updatePreviewHealth()}}
      },handler)
     }
     override fun onClosed(c:CameraDevice){idleClosing=false;val next=afterIdleClose;afterIdleClose=null;next?.invoke();if(resumed&&!starting)openIdle()}
     override fun onDisconnected(c:CameraDevice){c.close();idleCamera=null;idleOpening=false}
-    override fun onError(c:CameraDevice,error:Int){c.close();idleCamera=null;idleOpening=false;ui.post{state.text="Kamera tidak tersedia ($error)"}}
+    override fun onError(c:CameraDevice,error:Int){c.close();idleCamera=null;idleOpening=false;ui.post{previewProblem="Kamera tidak tersedia ($error)";updatePreviewHealth()}}
    },handler)
-  }catch(e:Exception){idleOpening=false;ui.post{state.text="Kamera: ${e.message?.take(60)}"}}
+  }catch(e:Exception){idleOpening=false;ui.post{previewProblem="Kamera: ${e.message?.take(60)}";updatePreviewHealth()}}
  }}
  private fun closeIdle(next:(()->Unit)?=null){handler.post{
   generation++;afterIdleClose=next
@@ -305,6 +361,7 @@ class MainActivity:Activity(){
  }}
  private fun start(){
   if(active||starting||CaptureService.phase=="SAVING"||CaptureService.phase=="STARTING")return
+  if(lastPreviewFrame==0L||SystemClock.elapsedRealtime()-lastPreviewFrame>2500){retryPreview();return}
   if(checkSelfPermission(Manifest.permission.CAMERA)!=PackageManager.PERMISSION_GRANTED){requestPermissions(arrayOf(Manifest.permission.CAMERA),1);return}
   if(audio&&interval==0&&checkSelfPermission(Manifest.permission.RECORD_AUDIO)!=PackageManager.PERMISSION_GRANTED){requestPermissions(arrayOf(Manifest.permission.RECORD_AUDIO),1);return}
   starting=true;shutter.isEnabled=false;state.text="Memulai rekaman"
@@ -330,13 +387,14 @@ class MainActivity:Activity(){
   pauseButton.visibility=if(active)View.VISIBLE else View.GONE;lensButton.visibility=if(active)View.GONE else View.VISIBLE
   pauseButton.setIcon(if(paused)"play" else "pause");pauseButton.contentDescription=if(paused)"Lanjutkan rekaman" else "Jeda rekaman"
   for(v in arrayOf(lensButton,qualityButton,stabilizeButton,videoMode,lapseMode)){v.isEnabled=!busy;v.alpha=if(busy).4f else 1f}
-  state.text=when(phase){"RECORDING"->"● MEREKAM";"PAUSED"->"DIJEDA";"STARTING"->"Memulai rekaman";"SAVING"->"Menyimpan…";"ERROR"->"Gagal: ${CaptureService.lastError.take(70)}";else->"Siap"}
+  state.visibility=View.VISIBLE
+  state.text=when(phase){"RECORDING"->"● MEREKAM";"PAUSED"->"DIJEDA";"STARTING"->"Memulai rekaman";"SAVING"->"Menyimpan…";"ERROR"->"Gagal: ${CaptureService.lastError.take(70)}";else->"Menghubungkan kamera…"}
   if(!busy){openIdle();refreshThumbnail()}
  }
  private fun stop(){command(CaptureService.STOP);shutter.isEnabled=false;state.text="Menyimpan…"}
  private fun pauseOrResume(){if(active)command(if(paused)CaptureService.RESUME else CaptureService.PAUSE)}
  private fun openGallery(){startActivity(Intent(this,GalleryActivity::class.java))}
- override fun onRequestPermissionsResult(requestCode:Int,permissions:Array<out String>,results:IntArray){super.onRequestPermissionsResult(requestCode,permissions,results);if(preview.isAvailable)openIdle()}
+ override fun onRequestPermissionsResult(requestCode:Int,permissions:Array<out String>,results:IntArray){super.onRequestPermissionsResult(requestCode,permissions,results);if(preview.isAvailable){if(previewSurface==null)attachSurface()else openIdle()}}
  override fun onConfigurationChanged(config:android.content.res.Configuration){super.onConfigurationChanged(config);viewfinder.post{fitPreview()}}
  override fun onResume(){super.onResume();resumed=true;lastPhase="";if(preview.isAvailable)attachSurface();ui.removeCallbacks(updater);ui.post(updater);refreshThumbnail()}
  override fun onPause(){resumed=false;if(CaptureService.phase!="STARTING")starting=false;ui.removeCallbacks(updater);getPreferences(MODE_PRIVATE).edit().putInt("quality",quality).putInt("interval",interval).putBoolean("audio",audio).putBoolean("stabilized",stabilized).putBoolean("grid",gridOverlay.gridVisible).apply();detachSurface();super.onPause()}

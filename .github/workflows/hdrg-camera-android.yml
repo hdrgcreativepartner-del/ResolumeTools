@@ -26,11 +26,37 @@ jobs:
           gradle-version: '8.9'
       - name: Build debug APK
         working-directory: AndroidCamera
-        run: gradle --no-daemon :app:assembleDebug
+        run: gradle --no-daemon :app:assembleDebug :app:assembleDebugAndroidTest
       - name: Prepare distributable APK
-        run: cp AndroidCamera/app/build/outputs/apk/debug/app-debug.apk HDRG-Cam-v0.6.2-debug.apk
+        run: cp AndroidCamera/app/build/outputs/apk/debug/app-debug.apk HDRG-Cam-v0.6.3-debug.apk
       - uses: actions/upload-artifact@v4
         with:
-          name: HDRG-Cam-v0.6.2-debug
-          path: HDRG-Cam-v0.6.2-debug.apk
+          name: HDRG-Cam-v0.6.3-debug
+          path: HDRG-Cam-v0.6.3-debug.apk
           if-no-files-found: error
+      - name: Enable KVM
+        run: sudo chmod 666 /dev/kvm
+      - name: Test live camera preview and recording
+        uses: reactivecircus/android-emulator-runner@v2
+        with:
+          api-level: 29
+          arch: x86_64
+          disable-animations: true
+          emulator-options: -no-window -gpu swiftshader_indirect -noaudio -no-boot-anim -camera-back emulated -camera-front emulated
+          script: |
+            adb install -r AndroidCamera/app/build/outputs/apk/debug/app-debug.apk
+            adb install -r AndroidCamera/app/build/outputs/apk/androidTest/debug/app-debug-androidTest.apk
+            adb shell pm grant com.hdrg.camera android.permission.CAMERA
+            adb shell pm grant com.hdrg.camera android.permission.RECORD_AUDIO
+            adb shell am instrument -w com.hdrg.camera.test/com.hdrg.camera.CameraSmokeInstrumentation > smoke.log
+            adb logcat -d > camera-logcat.txt
+            adb pull /sdcard/Android/data/com.hdrg.camera/files/qa camera-qa
+            grep HDRG_SMOKE_PASS smoke.log
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: camera-device-test-evidence
+          path: |
+            smoke.log
+            camera-logcat.txt
+            camera-qa

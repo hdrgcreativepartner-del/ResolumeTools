@@ -7,8 +7,8 @@
 <uses-permission android:name="android.permission.FOREGROUND_SERVICE_MICROPHONE"/>
 <uses-permission android:name="android.permission.POST_NOTIFICATIONS"/>
 <uses-feature android:name="android.hardware.camera" android:required="true"/>
-<application android:label="HDRG Cam" android:icon="@mipmap/ic_launcher" android:theme="@style/AppTheme" android:allowBackup="false" android:usesCleartextTraffic="false">
-<activity android:name="com.hdrg.camera.MainActivity" android:configChanges="orientation|screenSize" android:exported="true"><intent-filter><action android:name="android.intent.action.MAIN"/><category android:name="android.intent.category.LAUNCHER"/></intent-filter></activity>
+<application android:hardwareAccelerated="true" android:label="HDRG Cam" android:icon="@mipmap/ic_launcher" android:theme="@style/AppTheme" android:allowBackup="false" android:usesCleartextTraffic="false">
+<activity android:name="com.hdrg.camera.MainActivity" android:hardwareAccelerated="true" android:resizeableActivity="true" android:configChanges="orientation|screenSize" android:exported="true"><intent-filter><action android:name="android.intent.action.MAIN"/><category android:name="android.intent.category.LAUNCHER"/></intent-filter></activity>
 <activity android:name="com.hdrg.camera.GalleryActivity" android:exported="false"/>
 <service android:name="com.hdrg.camera.CaptureService" android:exported="false" android:foregroundServiceType="camera|microphone"/>
 </application></manifest>
