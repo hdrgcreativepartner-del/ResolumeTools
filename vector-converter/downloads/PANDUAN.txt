@@ -1,0 +1,37 @@
+HDRG VECTOR CONVERTER v0.1 — DESKTOP TOOLKIT
+Powered by HDRG Creative Partner | EST. MMXII.
+
+STATUS
+Toolkit awal, belum installer EXE/MSI atau konversi CDR sekali klik.
+Halaman web tidak mengunggah/membaca CDR dan tidak menjalankan aplikasi desktop.
+Skrip Illustrator belum diuji pada aplikasi CorelDRAW/Illustrator di Windows.
+
+1. PERSIAPAN DI CORELDRAW
+- Gunakan salinan CDR. Pastikan semua font sumber tersedia, jangan menerima
+  substitusi font jika bentuk asli harus dipertahankan.
+- File > Publish to PDF. Aktifkan Export all text as curves pada pengaturan teks.
+- Pilih PDF modern yang mendukung transparansi. Hindari flatten transparency.
+- Matikan complex fills as bitmaps jika tersedia. Periksa efek khusus.
+- Ekspor halaman yang dibutuhkan; catat jumlah halaman PDF.
+
+2. ILLUSTRATOR
+- File > Scripts > Other Script > HDRG-PDF-to-AI.jsx.
+- Pilih PDF (bisa lebih dari satu) dan folder output.
+- Masukkan nomor halaman PDF yang benar-benar ada, contoh 1-3,5.
+  Nomor sesuai urutan PDF, bukan label/nomor halaman di dokumen CorelDRAW.
+- Satu AI dihasilkan per halaman. Nama sama dilewati. Tidak ada overwrite.
+- Skrip meng-outline teks tersisa. Kegagalan outline membatalkan halaman itu.
+- Baca HDRG-report-<timestamp>.txt untuk hasil, kesalahan, jumlah path/bitmap.
+
+3. QUALITY CHECK
+- Bandingkan dengan CDR: bentuk huruf, ukuran, warna, clipping dan efek.
+- Periksa Outline View untuk melihat path, bukan hanya preview gambar.
+- Foto asli tetap bitmap. Efek CorelDRAW tertentu dapat menjadi bitmap saat
+  ekspor PDF; skrip tidak dapat memulihkannya menjadi vektor.
+- Jumlah path/raster bukan verifikasi kesetiaan otomatis.
+- Struktur layer CorelDRAW tidak dijamin sama. AI multi-artboard belum tersedia.
+- Font hilang tidak dapat diperbaiki hanya dengan convert to curve.
+
+REFERENSI
+https://help.coreldraw.com/CorelDRAW/540111192/Documentation-Windows/CorelDRAW-en/CorelDRAW-Text-and-fonts-in-PDF-files.html
+https://community.adobe.com/havfw69955/attachments/havfw69955/illustrator/426671/1/Illustrator%20JavaScript%20Scripting%20Reference.pdf
