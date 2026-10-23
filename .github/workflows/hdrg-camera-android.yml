@@ -6,7 +6,7 @@ on:
       - 'AndroidCamera/**'
       - '.github/workflows/hdrg-camera-android.yml'
 permissions:
-  contents: write
+  contents: read
 jobs:
   apk:
     runs-on: ubuntu-latest
@@ -26,18 +26,37 @@ jobs:
           gradle-version: '8.9'
       - name: Build debug APK
         working-directory: AndroidCamera
-        run: gradle --no-daemon :app:assembleDebug
+        run: gradle --no-daemon :app:assembleDebug :app:assembleDebugAndroidTest
       - name: Prepare distributable APK
-        run: cp AndroidCamera/app/build/outputs/apk/debug/app-debug.apk HDRG-Camera-v0.5-beta-debug.apk
+        run: cp AndroidCamera/app/build/outputs/apk/debug/app-debug.apk HDRG-Cam-v0.6.3-debug.apk
       - uses: actions/upload-artifact@v4
         with:
-          name: HDRG-Camera-Debug-APK
-          path: HDRG-Camera-v0.5-beta-debug.apk
+          name: HDRG-Cam-v0.6.3-debug
+          path: HDRG-Cam-v0.6.3-debug.apk
           if-no-files-found: error
-      - name: Publish downloadable APK release
-        shell: bash
-        env:
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        run: |
-          gh release view "hdrg-camera-v0.5-beta.0" >/dev/null 2>&1 || gh release create "hdrg-camera-v0.5-beta.0" --title "HDRG Camera v0.5-beta Beta" --notes "Android debug beta APK: full-screen camera UI, front/rear camera selection, recording preview surface, audio, pause/resume, time-lapse, gallery. Foreground notification active; on-device test required."
-          gh release upload "hdrg-camera-v0.5-beta.0" HDRG-Camera-v0.5-beta-debug.apk --clobber
+      - name: Enable KVM
+        run: sudo chmod 666 /dev/kvm
+      - name: Test live camera preview and recording
+        uses: reactivecircus/android-emulator-runner@v2
+        with:
+          api-level: 29
+          arch: x86_64
+          disable-animations: true
+          emulator-options: -no-window -gpu swiftshader_indirect -noaudio -no-boot-anim -camera-back emulated -camera-front emulated
+          script: |
+            adb install -r AndroidCamera/app/build/outputs/apk/debug/app-debug.apk
+            adb install -r AndroidCamera/app/build/outputs/apk/androidTest/debug/app-debug-androidTest.apk
+            adb shell pm grant com.hdrg.camera android.permission.CAMERA
+            adb shell pm grant com.hdrg.camera android.permission.RECORD_AUDIO
+            adb shell am instrument -w com.hdrg.camera.test/com.hdrg.camera.CameraSmokeInstrumentation > smoke.log
+            adb logcat -d > camera-logcat.txt
+            adb pull /sdcard/Android/data/com.hdrg.camera/files/qa camera-qa
+            grep HDRG_SMOKE_PASS smoke.log
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: camera-device-test-evidence
+          path: |
+            smoke.log
+            camera-logcat.txt
+            camera-qa

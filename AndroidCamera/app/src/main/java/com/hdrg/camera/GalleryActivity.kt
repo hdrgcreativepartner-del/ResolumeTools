@@ -1,53 +1,57 @@
 package com.hdrg.camera
 
 import android.app.Activity
-import android.content.ContentUris
 import android.graphics.Color
 import android.net.Uri
 import android.os.Bundle
-import android.os.Environment
-import android.provider.MediaStore
 import android.view.*
 import android.widget.*
-import android.media.MediaMetadataRetriever
+import java.util.concurrent.Executors
 
 class GalleryActivity:Activity(){
+ private val worker=java.util.concurrent.ThreadPoolExecutor(1,1,0L,java.util.concurrent.TimeUnit.MILLISECONDS,java.util.concurrent.ArrayBlockingQueue<Runnable>(32),java.util.concurrent.ThreadPoolExecutor.DiscardOldestPolicy())
+ private var player:VideoView?=null
+ private var generation=0
+ private fun dp(v:Int)=(v*resources.displayMetrics.density).toInt()
  override fun onCreate(state:Bundle?){super.onCreate(state);window.statusBarColor=Color.BLACK;window.navigationBarColor=Color.BLACK;showList()}
  private fun showList(){
-  val root=LinearLayout(this).apply{orientation=LinearLayout.VERTICAL;setBackgroundColor(Color.rgb(9,14,23))}
-  val bar=TextView(this).apply{text="‹     HDRG  /  GALLERY";textSize=21f;setTextColor(Color.WHITE);setPadding(28,30,20,26);setOnClickListener{finish()}}
-  root.addView(bar)
-  val scroll=ScrollView(this);val items=LinearLayout(this).apply{orientation=LinearLayout.VERTICAL;setPadding(18,0,18,20)}
-  scroll.addView(items);root.addView(scroll,LinearLayout.LayoutParams(-1,0,1f));setContentView(root)
-  val videos=mutableListOf<Pair<String,Uri>>()
-  if(android.os.Build.VERSION.SDK_INT>=29){
-   val cols=arrayOf(MediaStore.Video.Media._ID,MediaStore.Video.Media.DISPLAY_NAME)
-   val selection="${MediaStore.Video.Media.RELATIVE_PATH} LIKE ?"
-   contentResolver.query(MediaStore.Video.Media.EXTERNAL_CONTENT_URI,cols,selection,arrayOf("%HDRG Camera%"),"${MediaStore.Video.Media.DATE_ADDED} DESC")?.use{cursor->
-    while(cursor.moveToNext()){val id=cursor.getLong(0);videos.add(cursor.getString(1) to ContentUris.withAppendedId(MediaStore.Video.Media.EXTERNAL_CONTENT_URI,id))}
+  player?.stopPlayback();player=null;val token=++generation
+  val root=LinearLayout(this).apply{orientation=LinearLayout.VERTICAL;setBackgroundColor(0xff0a0d12.toInt());setOnApplyWindowInsetsListener{v,i->v.setPadding(i.systemWindowInsetLeft,i.systemWindowInsetTop,i.systemWindowInsetRight,i.systemWindowInsetBottom);i}}
+  root.addView(TextView(this).apply{text="‹   Galeri HDRG Cam";textSize=20f;setTextColor(Color.WHITE);setPadding(dp(20),dp(20),dp(20),dp(20));contentDescription="Kembali ke kamera";setOnClickListener{finish()}})
+  val list=ListView(this).apply{divider=null;setPadding(dp(12),0,dp(12),0)}
+  val empty=TextView(this).apply{text="Memuat rekaman…";textSize=15f;setTextColor(Color.LTGRAY);gravity=Gravity.CENTER;setPadding(dp(24),dp(40),dp(24),dp(40))}
+  root.addView(empty);root.addView(list,LinearLayout.LayoutParams(-1,0,1f));setContentView(root)
+  worker.execute{
+   val videos=MediaCatalog.list(this)
+   runOnUiThread{
+    if(isDestroyed||token!=generation)return@runOnUiThread
+    empty.text="Belum ada rekaman.\nVideo dan timelapse Anda akan tampil di sini.";empty.visibility=if(videos.isEmpty())View.VISIBLE else View.GONE
+    list.adapter=object:BaseAdapter(){
+     override fun getCount()=videos.size
+     override fun getItem(position:Int)=videos[position]
+     override fun getItemId(position:Int)=position.toLong()
+     override fun getView(position:Int,convertView:View?,parent:ViewGroup):View{
+      val row=convertView as? LinearLayout?:LinearLayout(this@GalleryActivity).apply{
+       gravity=Gravity.CENTER_VERTICAL;setPadding(dp(8),dp(8),dp(8),dp(8))
+       addView(ImageView(context).apply{scaleType=ImageView.ScaleType.CENTER_CROP;setBackgroundColor(0xff202630.toInt())},LinearLayout.LayoutParams(dp(88),dp(64)))
+       addView(TextView(context).apply{textSize=14f;setTextColor(Color.WHITE);setPadding(dp(16),0,dp(8),0);maxLines=2},LinearLayout.LayoutParams(0,-2,1f))
+      }
+      val entry=videos[position];val image=row.getChildAt(0) as ImageView;image.tag=entry.second;image.setImageDrawable(CameraIcon("play"));(row.getChildAt(1) as TextView).text=entry.first
+      worker.execute{val bitmap=MediaCatalog.thumbnail(this@GalleryActivity,entry.second,dp(128));runOnUiThread{if(!isDestroyed&&token==generation&&image.tag==entry.second&&bitmap!=null)image.setImageBitmap(bitmap)}}
+      row.setOnClickListener{openPlayer(entry.second)};return row
+     }
+    }
    }
-  }else{
-   getExternalFilesDir(Environment.DIRECTORY_MOVIES)?.listFiles()?.filter{it.extension=="mp4"}?.sortedByDescending{it.lastModified()}?.forEach{videos.add(it.name to Uri.fromFile(it))}
-  }
-  if(videos.isEmpty()){items.addView(TextView(this).apply{text="Belum ada rekaman.\nMulai merekam untuk melihat hasil di sini.";textSize=17f;setTextColor(Color.LTGRAY);setPadding(20,90,20,20);gravity=Gravity.CENTER});return}
-  videos.forEach{(name,uri)->
-   val row=LinearLayout(this).apply{gravity=Gravity.CENTER_VERTICAL;setPadding(12,10,12,10)}
-   val thumb=ImageView(this).apply{scaleType=ImageView.ScaleType.CENTER_CROP;setBackgroundColor(Color.rgb(22,36,56))}
-   row.addView(thumb,LinearLayout.LayoutParams(112,95))
-   try{val retriever=MediaMetadataRetriever();retriever.setDataSource(this,uri);thumb.setImageBitmap(retriever.getFrameAtTime(0));retriever.release()}catch(_:Exception){}
-   row.addView(TextView(this).apply{text=name;setTextColor(Color.WHITE);textSize=14f;setPadding(16,0,8,0)},LinearLayout.LayoutParams(0,-2,1f))
-   row.setOnClickListener{openPlayer(uri)}
-   items.addView(row)
   }
  }
  private fun openPlayer(uri:Uri){
-  val root=FrameLayout(this).apply{setBackgroundColor(Color.BLACK)}
-  val video=VideoView(this)
-  root.addView(video,FrameLayout.LayoutParams(-1,-1,Gravity.CENTER))
-  val close=TextView(this).apply{text="‹  Gallery";textSize=18f;setTextColor(Color.WHITE);setPadding(24,24,24,24);setOnClickListener{showList()}}
-  root.addView(close,FrameLayout.LayoutParams(-2,-2,Gravity.TOP or Gravity.START))
-  setContentView(root)
-  video.setVideoURI(uri);video.setMediaController(MediaController(this).apply{setAnchorView(video)})
-  video.setOnPreparedListener{video.start()}
+  ++generation;val root=FrameLayout(this).apply{setBackgroundColor(Color.BLACK)}
+  val video=VideoView(this);player=video;root.addView(video,FrameLayout.LayoutParams(-1,-1,Gravity.CENTER))
+  root.addView(TextView(this).apply{text="‹  Galeri";textSize=18f;setTextColor(Color.WHITE);setPadding(dp(24),dp(24),dp(24),dp(24));setOnClickListener{showList()}},FrameLayout.LayoutParams(-2,-2,Gravity.TOP or Gravity.START))
+  setContentView(root);video.setMediaController(MediaController(this).apply{setAnchorView(video)});video.setVideoURI(uri);video.setOnPreparedListener{video.start()}
+  video.setOnErrorListener{_,_,_->Toast.makeText(this,"Video tidak dapat diputar",Toast.LENGTH_LONG).show();showList();true}
  }
+ @Deprecated("Deprecated in Java") override fun onBackPressed(){if(player!=null)showList()else super.onBackPressed()}
+ override fun onPause(){player?.pause();super.onPause()}
+ override fun onDestroy(){++generation;player?.stopPlayback();worker.shutdownNow();super.onDestroy()}
 }
